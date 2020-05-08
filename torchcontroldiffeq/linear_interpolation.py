@@ -14,21 +14,47 @@ def _linear_interpolation_coeffs_with_missing_values_scalar(t, X):
         # Every entry is a NaN, so we take a constant path with derivative zero, so return zero coefficients.
         return torch.zeros(X.size(0), dtype=X.dtype, device=X.device)
 
+    X = X.clone()
     # How to deal with missing values at the start or end of the time series? We impute an observation at the very start
     # equal to the first actual observation made, and impute an observation at the very end equal to the last actual
     # observation made, and then proceed as normal.
-    need_new_not_nan = False
     if torch.isnan(X[0]):
-        if not need_new_not_nan:
-            X = X.clone()
-            need_new_not_nan = True
         X[0] = path_no_nan[0]
     if torch.isnan(X[-1]):
-        if not need_new_not_nan:
-            X = X.clone()
         X[-1] = path_no_nan[-1]
 
-    # TODO
+    nan_indices = torch.arange(X.size(0), device=X.device).masked_select(torch.isnan(X))
+
+    prev_nan_index = nan_indices[0]
+    prev_not_nan_index = prev_nan_index - 1
+    prev_not_nan_indices = [prev_not_nan_index]
+    for nan_index in nan_indices[1:]:
+        if prev_nan_index != nan_index - 1:
+            prev_not_nan_index = nan_index - 1
+        prev_nan_index = nan_index
+        prev_not_nan_indices.append(prev_not_nan_index)
+
+    next_nan_index = nan_indices[-1]
+    next_not_nan_index = next_nan_index + 1
+    next_not_nan_indices = [next_not_nan_index]
+    for nan_index in reversed(nan_indices[:-1]):
+        if next_nan_index != nan_index + 1:
+            next_not_nan_index = nan_index + 1
+        next_nan_index = nan_index
+        next_not_nan_indices.append(next_not_nan_index)
+    next_not_nan_indices = reversed(next_not_nan_indices)
+    for prev_not_nan_index, nan_index, next_not_nan_index in zip(prev_not_nan_indices,
+                                                                 nan_indices,
+                                                                 next_not_nan_indices):
+        prev_stream = X[prev_not_nan_index]
+        next_stream = X[next_not_nan_index]
+        prev_time = t[prev_not_nan_index]
+        next_time = t[next_not_nan_index]
+        time = t[nan_index]
+        ratio = (time - prev_time) / (next_time - prev_time)
+        X[nan_index] = prev_stream + ratio * (next_stream - prev_stream)
+
+    return X
 
 
 def _linear_interpolation_coeffs_with_missing_values(t, X):
