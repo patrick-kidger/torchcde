@@ -172,7 +172,7 @@ def natural_cubic_spline_coeffs(t, X):
         don't reinstantiate it on every forward pass, if at all possible.
 
     Returns:
-        Four tensors, which should in turn be passed to `torchcontroldiffeq.NaturalCubicSpline`.
+        A tuple of five tensors, which should in turn be passed to `torchcontroldiffeq.NaturalCubicSpline`.
 
         Why do we do it like this? Because typically you want to use PyTorch tensors at various interfaces, for example
         when loading a batch from a DataLoader. If we wrapped all of this up into just the
@@ -203,7 +203,7 @@ def natural_cubic_spline_coeffs(t, X):
     b = b.transpose(-1, -2)
     two_c = two_c.transpose(-1, -2)
     three_d = three_d.transpose(-1, -2)
-    return a, b, two_c, three_d
+    return t, a, b, two_c, three_d
 
 
 class NaturalCubicSpline(path.Path):
@@ -221,15 +221,14 @@ class NaturalCubicSpline(path.Path):
         out = spline.derivative(t)
     """
 
-    def __init__(self, t, coeffs, **kwargs):
+    def __init__(self, coeffs, **kwargs):
         """
         Arguments:
-            t: As was passed as an argument to `torchcontroldiffeq.natural_cubic_spline_coeffs`.
             coeffs: As returned by `torchcontroldiffeq.natural_cubic_spline_coeffs`.
         """
         super(NaturalCubicSpline, self).__init__(**kwargs)
 
-        a, b, two_c, three_d = coeffs
+        t, a, b, two_c, three_d = coeffs
 
         self._t = path.ComputedParameter(t)
         self._a = path.ComputedParameter(a)

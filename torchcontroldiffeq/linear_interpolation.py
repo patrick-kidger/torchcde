@@ -87,7 +87,7 @@ def linear_interpolation_coeffs(t, X):
         don't reinstantiate it on every forward pass, if at all possible.
 
     Returns:
-        One tensor, which should in turn be passed to `torchcontroldiffeq.LinearInterpolation`.
+        A tuple of two tensors, which should in turn be passed to `torchcontroldiffeq.LinearInterpolation`.
 
         See the docstring for `torchcontroldiffeq.natural_cubic_spline_coeffs` for more information on why we do it this
         way.
@@ -95,26 +95,27 @@ def linear_interpolation_coeffs(t, X):
     path.validate_input(t, X)
 
     if torch.isnan(X).any():
-        return _linear_interpolation_coeffs_with_missing_values(t, X)
+        return t, _linear_interpolation_coeffs_with_missing_values(t, X)
     else:
-        return X
+        return t, X
 
 
 class LinearInterpolation(path.Path):
     """Calculates the linear interpolation to the batch of controls given. Also calculates its derivative."""
 
-    def __init__(self, t, coeffs, **kwargs):
+    def __init__(self, coeffs, **kwargs):
         """
         Arguments:
-            t: As was passed as an argument to linear_interpolation_coeffs.
             coeffs: As returned by linear_interpolation_coeffs.
         """
         super(LinearInterpolation, self).__init__(**kwargs)
 
-        derivs = (coeffs[..., 1:, :] - coeffs[..., :-1, :]) / (t[1:] - t[:-1])
+        t, X = coeffs
+
+        derivs = (X[..., 1:, :] - X[..., :-1, :]) / (t[1:] - t[:-1])
 
         self._t = path.ComputedParameter(t)
-        self._coeffs = path.ComputedParameter(coeffs)
+        self._coeffs = path.ComputedParameter(X)
         self._derivs = path.ComputedParameter(derivs)
 
     def _interpret_t(self, t):
