@@ -121,11 +121,25 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
             kwargs['rtol'] = 1e-3
 
     if not isinstance(X, path.Path):
-        raise ValueError("X must be an instance of a subclass of torchcontroldiffeq.Path. This is needed to find the "
-                         "parameters we need to differentiate with respect to. When initialising your subclass, make "
-                         "sure that all leaf tensors requiring gradient are wrapped in a torch.nn.Parameter, and all "
-                         "the non-leaf tensors requiring a gradient are wrapped in a "
-                         "torchcontroldiffeq.ComputedParameter.")
+        raise ValueError("\nX must be an instance of a subclass of torchcontroldiffeq.Path; for example "
+                         "torchcontroldiffeq.LinearInterpolation or torchcontroldiffeq.NaturalCubicSpline. This is "
+                         "needed so that we can find the parameters we need to differentiate. If you "
+                         "want to create your own way of constructing X from data (i.e. not LinearInterpolation or "
+                         "NaturalCubicSpline), then:\n"
+                         "(a) Create a subclass of torchcontroldiffeq.Path\n"
+                         "(b) In __init__, make sure that all leaf tensors you want to differentiate are attributes, "
+                         "which should be torch.nn.Parameters as normal.\n"
+                         "(c) In __init__, make sure that all non-leaf tensors you want to differentiate are "
+                         "attributes, which should be wrapped in torchcontroldiffeq.ComputedParameters. (This arises "
+                         "when when controlling a CDE with something that requires gradient. Suppose you've got an "
+                         "input sequence that requires gradient, and you have done some computations to interpolate it "
+                         "into a continuous path. This continuous path will have some representation in terms of "
+                         "tensors. Then we need to differentiate with respect to these tensors. Gradients will be "
+                         "computed for them, and these will then automatically flow backwards to the sequence they "
+                         "were computed from. In summary, these computed tensors should be registered as "
+                         "ComputedParameters so that we know to differentiate with respect to them.)\n"
+                         "(d) Make sure to create a derivative(t) method, returning the derivative at the point t.\n"
+                         "Look at the code for torchcontroldiffeq.LinearInterpolation for a reasonably simple example.")
     control_gradient = X.derivative(t[0].detach())
     if control_gradient.shape[:-1] != z0.shape[:-1]:
         raise ValueError("X.derivative did not return a tensor with the same number of batch dimensions as z0. "

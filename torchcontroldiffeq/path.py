@@ -10,8 +10,6 @@ class ComputedParameter:
     """
     def __init__(self, tensor):
         super(ComputedParameter, self).__init__()
-        if tensor.requires_grad and tensor.is_leaf:
-            raise ValueError("This tensor requires a gradient, but is a leaf tensor. Use torch.nn.Parameter instead.")
         self.tensor = tensor
 
 

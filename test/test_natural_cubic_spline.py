@@ -58,10 +58,10 @@ def test_interp():
                     num_drop = int(num_points * torch.randint(low=1, high=4, size=(1,)).item() / 10)
                     num_drop = min(num_drop, num_points - 4)
                     to_drop = torch.randperm(num_points - 2)[:num_drop] + 1  # don't drop first or last
-                    values_slice[to_drop] = float('nan')
+                    values_slice[..., to_drop] = float('nan')
             coeffs = torchcontroldiffeq.natural_cubic_spline_coeffs(times, values)
-            spline = torchcontroldiffeq.NaturalCubicSpline(coeffs)
-            _test_equal(batch_dims, num_channels, cubic, spline)
+            spline = torchcontroldiffeq.NaturalCubicSpline(times, coeffs)
+            _test_equal(batch_dims, num_channels, cubic, spline, torch.float64)
 
 
 def test_linear():
@@ -69,41 +69,41 @@ def test_linear():
     end = torch.rand(1).item() * 5 - 2.5
     start, end = min(start, end), max(start, end)
     num_points = torch.randint(low=2, high=10, size=(1,)).item()
-    m = torch.rand(1).item() * 5 - 2.5
-    c = torch.rand(1).item() * 5 - 2.5
+    num_channels = torch.randint(low=1, high=4, size=(1,)).item()
+    m = torch.rand(num_channels) * 5 - 2.5
+    c = torch.rand(num_channels) * 5 - 2.5
     times = torch.linspace(start, end, num_points)
-    values = m * times + c
+    values = m * times.unsqueeze(-1) + c
     coeffs = torchcontroldiffeq.natural_cubic_spline_coeffs(times, values)
-    spline = torchcontroldiffeq.NaturalCubicSpline(coeffs)
+    spline = torchcontroldiffeq.NaturalCubicSpline(times, coeffs)
     coeffs2 = torchcontroldiffeq.linear_interpolation_coeffs(times, values)
-    linear = torchcontroldiffeq.LinearInterpolation(coeffs2)
+    linear = torchcontroldiffeq.LinearInterpolation(times, coeffs2)
     batch_dims = []
-    num_channels = 1
-    _test_equal(batch_dims, num_channels, linear, spline)
+    _test_equal(batch_dims, num_channels, linear, spline, torch.float32)
 
 
 def test_short():
     times = torch.tensor([0., 1.])
     values = torch.rand(2, 1)
     coeffs = torchcontroldiffeq.natural_cubic_spline_coeffs(times, values)
-    spline = torchcontroldiffeq.NaturalCubicSpline(coeffs)
+    spline = torchcontroldiffeq.NaturalCubicSpline(times, coeffs)
     coeffs2 = torchcontroldiffeq.linear_interpolation_coeffs(times, values)
-    linear = torchcontroldiffeq.LinearInterpolation(coeffs2)
+    linear = torchcontroldiffeq.LinearInterpolation(times, coeffs2)
     batch_dims = []
     num_channels = 1
-    _test_equal(batch_dims, num_channels, linear, spline)
+    _test_equal(batch_dims, num_channels, linear, spline, torch.float32)
 
 
 # TODO: test other edge cases
 
 
-def _test_equal(batch_dims, num_channels, obj1, obj2):
+def _test_equal(batch_dims, num_channels, obj1, obj2, dtype):
     for dimension in (0, 1, 2):
         sizes = []
         for _ in range(dimension):
             sizes.append(torch.randint(low=1, high=4, size=(1,)).item())
         expected_size = tuple(batch_dims) + tuple(sizes) + (num_channels,)
-        eval_times = torch.rand(sizes, dtype=torch.float64) * 3 - 1.5
+        eval_times = torch.rand(sizes, dtype=dtype) * 3 - 1.5
         obj1_evaluate = obj1.evaluate(eval_times)
         obj2_evaluate = obj2.evaluate(eval_times)
         obj1_derivative = obj1.derivative(eval_times)
@@ -112,8 +112,8 @@ def _test_equal(batch_dims, num_channels, obj1, obj2):
         assert obj2_evaluate.shape == expected_size
         assert obj1_derivative.shape == expected_size
         assert obj2_derivative.shape == expected_size
-        assert obj1_evaluate.allclose(obj2_evaluate)
-        assert obj1_derivative.allclose(obj2_derivative)
+        assert obj1_evaluate.allclose(obj2_evaluate, rtol=1e-4, atol=1e-6)
+        assert obj1_derivative.allclose(obj2_derivative, rtol=1e-4, atol=1e-6)
 
 
 def test_specification():
@@ -127,7 +127,7 @@ def test_specification():
             t = torch.linspace(0, 1, length, dtype=torch.float64)
             x = torch.rand(*batch_dims, length, channels, dtype=torch.float64)
             coeffs = torchcontroldiffeq.natural_cubic_spline_coeffs(t, x)
-            spline = torchcontroldiffeq.NaturalCubicSpline(coeffs)
+            spline = torchcontroldiffeq.NaturalCubicSpline(t, coeffs)
             for i, point in enumerate(t):
                 out = spline.evaluate(point)
                 xi = x[..., i, :]

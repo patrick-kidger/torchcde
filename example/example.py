@@ -54,21 +54,23 @@ class NeuralCDE(torch.nn.Module):
         self.func = CDEFunc(input_channels, hidden_channels)
         self.linear = torch.nn.Linear(hidden_channels, output_channels)
 
-    def forward(self, coeffs, initial_t, final_t):
+    def forward(self, t, coeffs):
         ######################
         # Create the initial point as a function (here just linear) of the initial value.
         ######################
-        cubic_spline = torchcontroldiffeq.NaturalCubicSpline(coeffs)
+        initial_t = t[0]
+        cubic_spline = torchcontroldiffeq.NaturalCubicSpline(t, coeffs)
         z0 = self.initial(cubic_spline.evaluate(initial_t))
 
         ######################
         # Actually solve the CDE. z_T will be a tensor of shape (batch, sequence, channels). Here sequence=2, as that is
         # the length of its 't' argument.
         ######################
+        final_t = t[-1]
         z_T = torchcontroldiffeq.cdeint(X=cubic_spline,
                                         func=self.func,
                                         z0=z0,
-                                        t=torch.cat([initial_t, final_t]))
+                                        t=torch.stack([initial_t, final_t]))
 
         ######################
         # Both the initial value and the final value are returned from cdeint (this is consistent with how
@@ -111,7 +113,7 @@ def get_data():
     return t, X, y
 
 
-def main():
+def main(num_epochs=100):
     ######################
     # train_t is a one dimensional tensor of times, that must be shared across an entire batch during training (and so
     # for simplicity here we simply have the same times for the whole dataset). This means that train_t does not have a
@@ -138,10 +140,10 @@ def main():
 
     train_dataset = torch.utils.data.TensorDataset(*train_coeffs, train_y)
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=32)
-    for epoch in range(100):
+    for epoch in range(num_epochs):
         for batch in train_dataloader:
             *batch_coeffs, batch_y = batch
-            pred_y = model(batch_coeffs, train_t[0], train_t[-1]).squeeze(-1)
+            pred_y = model(train_t, batch_coeffs).squeeze(-1)
             loss = torch.nn.functional.binary_cross_entropy_with_logits(pred_y, batch_y)
             loss.backward()
             optimizer.step()
@@ -150,7 +152,7 @@ def main():
 
     test_t, test_X, test_y = get_data()
     test_coeffs = torchcontroldiffeq.natural_cubic_spline_coeffs(test_t, test_X)
-    pred_y = model(test_coeffs, test_t[0], test_t[-1]).squeeze(-1)
+    pred_y = model(test_t, test_coeffs).squeeze(-1)
     binary_prediction = (torch.sigmoid(pred_y) > 0.5).to(test_y.dtype)
     prediction_matches = (binary_prediction == test_y).to(test_y.dtype)
     proportion_correct = prediction_matches.sum() / test_y.size(0)

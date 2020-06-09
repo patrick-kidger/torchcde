@@ -8,12 +8,12 @@ except ImportError:
     signatory = DummyModule()
 import torch
 
-from . import linear_interpolation
+from . import interpolation_linear
 from . import path
 
 
-def log_ode_coeffs(t, X, depth, window_length):
-    """Calculates logsignatures for use in the log-ODE method, for the batch of controls given.
+def logsignature_windows(t, X, depth, window_length):
+    """Calculates logsignatures over multiple windows, for the batch of controls given, as in the log-ODE method.
 
     Arguments:
         t: One dimensional tensor of times. Must be monotonically increasing.
@@ -31,10 +31,7 @@ def log_ode_coeffs(t, X, depth, window_length):
         don't reinstantiate it on every forward pass, if at all possible.
 
     Returns:
-        A tuple of three tensors, which should in turn be passed to `torchcontroldiffeq.LogODE`.
-
-        See the docstring for `torchcontroldiffeq.natural_cubic_spline_coeffs` for more information on why we do it this
-        way.
+        A tuple of two tensors, which are the times and values of the transformed path.
     """
     path.validate_input(t, X)
 
@@ -49,25 +46,27 @@ def log_ode_coeffs(t, X, depth, window_length):
     new_t_unique = []
     new_t_indices = []
     for new_t_elem in new_t:
-        while new_t_elem > t[t_index]:
+        while True:
+            lequal = (new_t_elem <= t[t_index])
+            close = new_t_elem.allclose(t[t_index])
+            if lequal or close:
+                break
             t_index += 1
         new_t_indices.append(t_index + len(new_t_unique))
-        if new_t_elem.allclose(t[t_index]):
-            continue
-        if new_t_elem.allclose(t[t_index - 1]):
+        if close:
             continue
         new_t_unique.append(new_t_elem.unsqueeze(0))
 
     batch_dimensions = X.shape[:-2]
 
-    missing_X = torch.full((*batch_dimensions, 1, X.size(-1)), float('nan'), dtype=X.dtype, device=X.device)
-    t, indices = torch.cat([t, *new_t_unique]).sort()
+    missing_X = torch.full((1,), float('nan'), dtype=X.dtype, device=X.device).expand(*batch_dimensions, 1, X.size(-1))
     if len(new_t_unique) > 0:  # no-op if len == 0, so skip for efficiency
+        t, indices = torch.cat([t, *new_t_unique]).sort()
         X = torch.cat([X, missing_X], dim=-2)[..., indices.clamp(0, X.size(-2)), :]
 
     # Fill in any missing data linearly (linearly because that's what signatures do in between observations anyway)
-    # and conveniently that's what this already does
-    _, X = linear_interpolation.linear_interpolation_coeffs(t, X)
+    # and conveniently that's what this already does. Here 'missing data' includes the NaNs we've just added.
+    _, X = interpolation_linear.linear_interpolation_coeffs(t, X)
 
     # Flatten batch dimensions for compatibility with Signatory
     flatten_X = X.view(-1, X.size(-2), X.size(-1))
@@ -78,47 +77,7 @@ def log_ode_coeffs(t, X, depth, window_length):
         logsignatures.append(logsignature.view(*batch_dimensions, -1))
 
     logsignatures = torch.stack(logsignatures, dim=-2)
+    logsignatures = logsignatures.cumsum(dim=-2)
+    logsignatures[..., :X.size(-1)] += X[..., 0, :]
 
-    return new_t, logsignatures, X[..., 0, :]
-
-
-class LogODE(path.Path):
-    """Describes the logsignatures of some data as in the log-ODE method."""
-
-    def __init__(self, coeffs, **kwargs):
-        """
-        Arguments:
-            coeffs: As returned by log_ode_coeffs.
-        """
-        super(LogODE, self).__init__(**kwargs)
-
-        t, logsignatures, X0 = coeffs
-
-        self._t = path.ComputedParameter(t)
-        self._logsignatures = path.ComputedParameter(logsignatures)
-        self._X0 = path.ComputedParameter(X0)
-        self._eval = None
-
-    def _interpret_t(self, t):
-        maxlen = self._logsignatures.size(-2) - 1
-        # TODO: switch to a log search not a linear search
-        index = (t.unsqueeze(-1) > self._t).sum(dim=-1) - 1
-        index = index.clamp(0, maxlen)  # clamp because t may go outside of [t[0], t[-1]]; this is fine
-        # will never access the last element of self._t; this is correct behaviour
-        fractional_part = t - self._t[index]
-        return fractional_part, index
-
-    def evaluate(self, t):
-        if self._eval is None:
-            t_diff = self._t[1:] - self._t[:-1]
-            scaled_logsignatures = t_diff.unsqueeze(-1) * self._logsignatures
-            eval = scaled_logsignatures.cumsum(dim=-2)
-            eval[..., :self._X0.size(-1)] += self._X0
-            self._eval = eval
-        fractional_part, index = self._interpret_t(t)
-        fractional_part = fractional_part.unsqueeze(-1)
-        return self._eval[..., index, :] + fractional_part * self._logsignatures[..., index, :]
-
-    def derivative(self, t):
-        _, index = self._interpret_t(t)
-        return self._logsignatures[..., index, :]
+    return new_t, logsignatures

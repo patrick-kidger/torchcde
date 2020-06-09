@@ -1,4 +1,3 @@
-import functools as ft
 import pytest
 import torch
 import torchcontroldiffeq
@@ -10,10 +9,6 @@ def test_computed_parameter():
 
     class TestPath(torchcontroldiffeq.Path):
         def __init__(self):
-            with pytest.raises(ValueError):
-                # ComputedParameter isn't appropriate here; should error
-                self.should_fail = torchcontroldiffeq.ComputedParameter(torch.rand(1, requires_grad=True))
-
             with pytest.raises(RuntimeError):
                 # Before super().__init__(); should error
                 self.should_fail = torchcontroldiffeq.ComputedParameter(torch.rand(1, requires_grad=True).clone())
@@ -144,7 +139,7 @@ def test_grad_paths():
         t = torch.linspace(0, 9, 10, requires_grad=True)
         path = torch.rand(1, 10, 3, requires_grad=True)
         coeffs = torchcontroldiffeq.natural_cubic_spline_coeffs(t, path)
-        cubic_spline = torchcontroldiffeq.NaturalCubicSpline(coeffs)
+        cubic_spline = torchcontroldiffeq.NaturalCubicSpline(t, coeffs)
         z0 = torch.rand(1, 3, requires_grad=True)
         func = _Func(input_size=3, hidden_size=3)
         t_ = torch.tensor([0., 9.], requires_grad=True)
@@ -164,14 +159,22 @@ def test_grad_paths():
         assert isinstance(t_.grad, torch.Tensor)
 
 
-# TODO: fix test
+class Record(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x, name):
+        ctx.name = name
+        return x
+    @staticmethod
+    def backward(ctx, x):
+        print(ctx.name)
+        return x, None
+
+
 # Test that gradients flow back through multiple CDEs stacked on top of one another
 def test_stacked_paths():
-    log_ode_coeffs = ft.partial(torchcontroldiffeq.log_ode_coeffs, depth=3, window_length=5)
     coeff_paths = [(torchcontroldiffeq.linear_interpolation_coeffs, torchcontroldiffeq.LinearInterpolation),
-                   (torchcontroldiffeq.natural_cubic_spline_coeffs, torchcontroldiffeq.NaturalCubicSpline),
-                   (log_ode_coeffs, torchcontroldiffeq.LogODE)]
-    for adjoint in (True, False):
+                   (torchcontroldiffeq.natural_cubic_spline_coeffs, torchcontroldiffeq.NaturalCubicSpline)]
+    for adjoint in (False, True):
         for first_coeffs, First in coeff_paths:
             for second_coeffs, Second in coeff_paths:
                 for third_coeffs, Third in coeff_paths:
@@ -180,37 +183,34 @@ def test_stacked_paths():
                     first_t = torch.linspace(0, 999, 1000)
                     first_path = torch.rand(1, 1000, 4, requires_grad=True)
                     first_coeff = first_coeffs(first_t, first_path)
-                    first_X = First(first_coeff)
-                    first_func = _Func(input_size=30 if first_coeffs is log_ode_coeffs else 4, hidden_size=4)
-                    print('a')
+                    first_X = First(first_t, first_coeff)
+                    first_func = _Func(input_size=4, hidden_size=4)
 
                     second_t = torch.linspace(0, 999, 100)
                     second_path = torchcontroldiffeq.cdeint(X=first_X, func=first_func, z0=torch.rand(1, 4), t=second_t,
                                                             adjoint=adjoint, method='rk4')
+                    second_path = Record.apply(second_path, 'second')
                     second_coeff = second_coeffs(second_t, second_path)
-                    second_X = Second(second_coeff)
-                    second_func = _Func(input_size=30 if second_coeffs is log_ode_coeffs else 4, hidden_size=4)
-                    print('b')
+                    second_X = Second(second_t, second_coeff)
+                    second_func = _Func(input_size=4, hidden_size=4)
 
                     third_t = torch.linspace(0, 999, 10)
                     third_path = torchcontroldiffeq.cdeint(X=second_X, func=second_func, z0=torch.rand(1, 4), t=third_t,
                                                            adjoint=adjoint, method='rk4')
+                    third_path = Record.apply(third_path, 'third')
                     third_coeff = third_coeffs(third_t, third_path)
-                    third_X = Third(third_coeff)
-                    third_func = _Func(input_size=30 if third_coeffs is log_ode_coeffs else 4, hidden_size=5)
-                    print('c')
+                    third_X = Third(third_t, third_coeff)
+                    third_func = _Func(input_size=4, hidden_size=5)
 
                     fourth_t = torch.tensor([0, 999.])
                     fourth_path = torchcontroldiffeq.cdeint(X=third_X, func=third_func, z0=torch.rand(1, 5), t=fourth_t,
                                                             adjoint=adjoint, method='rk4')
-                    print('d')
+                    fourth_path = Record.apply(fourth_path, 'fourth')
                     assert first_func.variable.grad is None
                     assert second_func.variable.grad is None
                     assert third_func.variable.grad is None
                     assert first_path.grad is None
-                    print('e')
                     fourth_path[:, -1].sum().backward()
-                    print('f')
                     assert isinstance(first_func.variable.grad, torch.Tensor)
                     assert isinstance(second_func.variable.grad, torch.Tensor)
                     assert isinstance(third_func.variable.grad, torch.Tensor)
@@ -222,7 +222,7 @@ def test_detach_trick():
     t = torch.linspace(0, 9, 10)
     path = torch.rand(1, 10, 3)
     coeffs = torchcontroldiffeq.natural_cubic_spline_coeffs(t, path)
-    cubic_spline = torchcontroldiffeq.NaturalCubicSpline(coeffs)
+    cubic_spline = torchcontroldiffeq.NaturalCubicSpline(t, coeffs)
     func = _Func(input_size=3, hidden_size=3)
 
     for adjoint in (True, False):
