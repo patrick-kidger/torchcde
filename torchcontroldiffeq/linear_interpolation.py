@@ -4,26 +4,34 @@ from . import path
 from . import misc
 
 
-def _linear_interpolation_coeffs_with_missing_values_scalar(t, X):
+def _linear_interpolation_coeffs_with_missing_values_scalar(t, x):
     # t and X both have shape (length,)
 
-    not_nan = ~torch.isnan(X)
-    path_no_nan = X.masked_select(not_nan)
+    not_nan = ~torch.isnan(x)
+    path_no_nan = x.masked_select(not_nan)
 
     if path_no_nan.size(0) == 0:
         # Every entry is a NaN, so we take a constant path with derivative zero, so return zero coefficients.
-        return torch.zeros(X.size(0), dtype=X.dtype, device=X.device)
+        return torch.zeros(x.size(0), dtype=x.dtype, device=x.device)
 
-    X = X.clone()
+    if path_no_nan.size(0) == x.size(0):
+        # Every entry is not-NaN, so just return.
+        return x
+
+    x = x.clone()
     # How to deal with missing values at the start or end of the time series? We impute an observation at the very start
     # equal to the first actual observation made, and impute an observation at the very end equal to the last actual
     # observation made, and then proceed as normal.
-    if torch.isnan(X[0]):
-        X[0] = path_no_nan[0]
-    if torch.isnan(X[-1]):
-        X[-1] = path_no_nan[-1]
+    if torch.isnan(x[0]):
+        x[0] = path_no_nan[0]
+    if torch.isnan(x[-1]):
+        x[-1] = path_no_nan[-1]
 
-    nan_indices = torch.arange(X.size(0), device=X.device).masked_select(torch.isnan(X))
+    nan_indices = torch.arange(x.size(0), device=x.device).masked_select(torch.isnan(x))
+
+    if nan_indices.size(0) == 0:
+        # We only had missing values at the start or end
+        return x
 
     prev_nan_index = nan_indices[0]
     prev_not_nan_index = prev_nan_index - 1
@@ -46,36 +54,36 @@ def _linear_interpolation_coeffs_with_missing_values_scalar(t, X):
     for prev_not_nan_index, nan_index, next_not_nan_index in zip(prev_not_nan_indices,
                                                                  nan_indices,
                                                                  next_not_nan_indices):
-        prev_stream = X[prev_not_nan_index]
-        next_stream = X[next_not_nan_index]
+        prev_stream = x[prev_not_nan_index]
+        next_stream = x[next_not_nan_index]
         prev_time = t[prev_not_nan_index]
         next_time = t[next_not_nan_index]
         time = t[nan_index]
         ratio = (time - prev_time) / (next_time - prev_time)
-        X[nan_index] = prev_stream + ratio * (next_stream - prev_stream)
+        x[nan_index] = prev_stream + ratio * (next_stream - prev_stream)
 
-    return X
+    return x
 
 
-def _linear_interpolation_coeffs_with_missing_values(t, X):
-    if len(X.shape) == 1:
+def _linear_interpolation_coeffs_with_missing_values(t, x):
+    if x.ndimension() == 1:
         # We have to break everything down to individual scalar paths because of the possibility of missing values
         # being different in different channels
-        return _linear_interpolation_coeffs_with_missing_values_scalar(t, X)
+        return _linear_interpolation_coeffs_with_missing_values_scalar(t, x)
     else:
         out_pieces = []
-        for p in X.unbind(dim=0):  # TODO: parallelise over this
+        for p in x.unbind(dim=0):  # TODO: parallelise over this
             out = _linear_interpolation_coeffs_with_missing_values(t, p)
             out_pieces.append(out)
         return misc.cheap_stack(out_pieces, dim=0)
 
 
-def linear_interpolation_coeffs(t, X):
+def linear_interpolation_coeffs(t, x):
     """Calculates the knots of the linear interpolation of the batch of controls given.
 
     Arguments:
         t: One dimensional tensor of times. Must be monotonically increasing.
-        X: tensor of values, of shape (..., length, input_channels), where ... is some number of batch dimensions. This
+        x: tensor of values, of shape (..., length, input_channels), where ... is some number of batch dimensions. This
             is interpreted as a (batch of) paths taking values in an input_channels-dimensional real vector space, with
             length-many observations. Missing values are supported, and should be represented as NaNs.
 
@@ -92,12 +100,13 @@ def linear_interpolation_coeffs(t, X):
         See the docstring for `torchcontroldiffeq.natural_cubic_spline_coeffs` for more information on why we do it this
         way.
     """
-    path.validate_input(t, X)
+    path.validate_input(t, x)
 
-    if torch.isnan(X).any():
-        return t, _linear_interpolation_coeffs_with_missing_values(t, X)
+    if torch.isnan(x).any():
+        x = _linear_interpolation_coeffs_with_missing_values(t, x.transpose(-1, -2)).transpose(-1, -2)
     else:
-        return t, X
+        x = misc.identity(x)
+    return misc.identity(t), x
 
 
 class LinearInterpolation(path.Path):
@@ -112,15 +121,16 @@ class LinearInterpolation(path.Path):
 
         t, X = coeffs
 
-        derivs = (X[..., 1:, :] - X[..., :-1, :]) / (t[1:] - t[:-1])
+        derivs = (X[..., 1:, :] - X[..., :-1, :]) / (t[1:] - t[:-1]).unsqueeze(-1)
 
         self._t = path.ComputedParameter(t)
         self._coeffs = path.ComputedParameter(X)
         self._derivs = path.ComputedParameter(derivs)
 
     def _interpret_t(self, t):
-        maxlen = self._coeffs.size(-2) - 1
-        index = (t > self._t).sum() - 1
+        maxlen = self._derivs.size(-2) - 1
+        # TODO: switch to a log search not a linear search
+        index = (t.unsqueeze(-1) > self._t).sum(dim=-1) - 1
         index = index.clamp(0, maxlen)  # clamp because t may go outside of [t[0], t[-1]]; this is fine
         # will never access the last element of self._t; this is correct behaviour
         fractional_part = t - self._t[index]
@@ -128,10 +138,11 @@ class LinearInterpolation(path.Path):
 
     def evaluate(self, t):
         fractional_part, index = self._interpret_t(t)
-        prev = self._coeffs[index]
-        next = self._coeffs[index + 1]
+        fractional_part = fractional_part.unsqueeze(-1)
+        prev = self._coeffs[..., index, :]
+        next = self._coeffs[..., index + 1, :]
         return prev + fractional_part * (next - prev)
 
     def derivative(self, t):
         _, index = self._interpret_t(t)
-        return self._derivs[index]
+        return self._derivs[..., index, :]

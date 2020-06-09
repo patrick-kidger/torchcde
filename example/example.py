@@ -54,26 +54,27 @@ class NeuralCDE(torch.nn.Module):
         self.func = CDEFunc(input_channels, hidden_channels)
         self.linear = torch.nn.Linear(hidden_channels, output_channels)
 
-    def forward(self, times, coeffs):
+    def forward(self, coeffs, initial_t, final_t):
         ######################
         # Create the initial point as a function (here just linear) of the initial value.
         ######################
-        cubic_spline = torchcontroldiffeq.NaturalCubicSpline(times, coeffs)
-        z0 = self.initial(cubic_spline.evaluate(times[0]))
+        cubic_spline = torchcontroldiffeq.NaturalCubicSpline(coeffs)
+        z0 = self.initial(cubic_spline.evaluate(initial_t))
 
         ######################
-        # Actually solve the CDE.
+        # Actually solve the CDE. z_T will be a tensor of shape (batch, sequence, channels). Here sequence=2, as that is
+        # the length of its 't' argument.
         ######################
         z_T = torchcontroldiffeq.cdeint(X=cubic_spline,
-                                        z0=z0,
                                         func=self.func,
-                                        t=times[[0, -1]])
+                                        z0=z0,
+                                        t=torch.cat([initial_t, final_t]))
 
         ######################
-        # Both the initial value and the terminal value are returned from cdeint; extract just the terminal value,
-        # and then apply a linear map.
+        # Both the initial value and the final value are returned from cdeint (this is consistent with how
+        # torchdiffeq.odeint works). Extract just the final value, and then apply a linear map.
         ######################
-        z_T = z_T[1]
+        z_T = z_T[:, 1]
         pred_y = self.linear(z_T)
         return pred_y
 
@@ -113,9 +114,9 @@ def get_data():
 def main():
     ######################
     # train_t is a one dimensional tensor of times, that must be shared across an entire batch during training (and so
-    # for simplicity here we simply have the same times for the whole dataset). This means that it does not have a
-    # batch dimension, and is used everywhere we need the times.
-    # Contrast both train_X and train_y which have a batch dimension.
+    # for simplicity here we simply have the same times for the whole dataset). This means that train_t does not have a
+    # batch dimension, and is just used everywhere we need the times.
+    # Contrast both train_X and train_y, which have a batch dimension.
     ######################
     train_t, train_X, train_y = get_data()
 
@@ -140,7 +141,7 @@ def main():
     for epoch in range(100):
         for batch in train_dataloader:
             *batch_coeffs, batch_y = batch
-            pred_y = model(train_t, batch_coeffs).squeeze(-1)
+            pred_y = model(batch_coeffs, train_t[0], train_t[-1]).squeeze(-1)
             loss = torch.nn.functional.binary_cross_entropy_with_logits(pred_y, batch_y)
             loss.backward()
             optimizer.step()
@@ -149,7 +150,7 @@ def main():
 
     test_t, test_X, test_y = get_data()
     test_coeffs = torchcontroldiffeq.natural_cubic_spline_coeffs(test_t, test_X)
-    pred_y = model(test_t, test_coeffs).squeeze(-1)
+    pred_y = model(test_coeffs, test_t[0], test_t[-1]).squeeze(-1)
     binary_prediction = (torch.sigmoid(pred_y) > 0.5).to(test_y.dtype)
     prediction_matches = (binary_prediction == test_y).to(test_y.dtype)
     proportion_correct = prediction_matches.sum() / test_y.size(0)

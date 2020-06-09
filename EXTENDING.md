@@ -9,9 +9,9 @@ But there's no reason you can't define your own! There are two technical caveats
 
 #### The rules
 
-- First of all, whatever your interpolation / curve-fitting / etc. strategy is, it should inherit from `torchcontroldiffeq.Path`, and implement the `derivative(t)` (and optionally `evaluate(t)`) method.
+- First of all, whatever your interpolation / curve-fitting / etc. strategy is, it should inherit from `torchcontroldiffeq.Path`, and implement the `derivative(t)` (and optionally `evaluate(t)`) methods.
 
-- Second, your path probably depends on some tensors that you've computed. When recording these tensors in `__init__`, make sure to wrap them in `torchcontroldiffeq.ComputedParameter`s. (See how it's done in the existing strategies.)
+- Second, your path probably depends on some tensors that you've computed from the data. When recording these tensors in `__init__`, make sure to wrap them in `torchcontroldiffeq.ComputedParameter`s. (See how it's done in the existing strategies.)
 
 #### Why these rules?
 

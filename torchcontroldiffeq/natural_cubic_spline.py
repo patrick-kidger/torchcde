@@ -4,36 +4,36 @@ from . import path
 from . import misc
 
 
-def _natural_cubic_spline_coeffs_without_missing_values(t, X):
-    # X should be a tensor of shape (..., length)
+def _natural_cubic_spline_coeffs_without_missing_values(t, x):
+    # x should be a tensor of shape (..., length)
     # Will return the b, two_c, three_d coefficients of the derivative of the cubic spline interpolating the path.
 
-    length = X.size(-1)
+    length = x.size(-1)
 
     if length < 2:
         # In practice this should always already be caught in __init__.
         raise ValueError("Must have a time dimension of size at least 2.")
     elif length == 2:
-        a = X[..., :1]
-        b = (X[..., 1:] - X[..., :1]) / (t[..., 1:] - t[..., :1])
-        two_c = torch.zeros(*X.shape[:-1], 1, dtype=X.dtype, device=X.device)
-        three_d = torch.zeros(*X.shape[:-1], 1, dtype=X.dtype, device=X.device)
+        a = x[..., :1]
+        b = (x[..., 1:] - x[..., :1]) / (t[..., 1:] - t[..., :1])
+        two_c = torch.zeros(*x.shape[:-1], 1, dtype=x.dtype, device=x.device)
+        three_d = torch.zeros(*x.shape[:-1], 1, dtype=x.dtype, device=x.device)
     else:
         # Set up some intermediate values
         time_diffs = t[1:] - t[:-1]
         time_diffs_reciprocal = time_diffs.reciprocal()
         time_diffs_reciprocal_squared = time_diffs_reciprocal ** 2
-        three_path_diffs = 3 * (X[..., 1:] - X[..., :-1])
+        three_path_diffs = 3 * (x[..., 1:] - x[..., :-1])
         six_path_diffs = 2 * three_path_diffs
         path_diffs_scaled = three_path_diffs * time_diffs_reciprocal_squared
 
         # Solve a tridiagonal linear system to find the derivatives at the knots
-        system_diagonal = torch.empty(length, dtype=X.dtype, device=X.device)
+        system_diagonal = torch.empty(length, dtype=x.dtype, device=x.device)
         system_diagonal[:-1] = time_diffs_reciprocal
         system_diagonal[-1] = 0
         system_diagonal[1:] += time_diffs_reciprocal
         system_diagonal *= 2
-        system_rhs = torch.empty_like(X)
+        system_rhs = torch.empty_like(x)
         system_rhs[..., :-1] = path_diffs_scaled
         system_rhs[..., -1] = 0
         system_rhs[..., 1:] += path_diffs_scaled
@@ -41,7 +41,7 @@ def _natural_cubic_spline_coeffs_without_missing_values(t, X):
                                                   time_diffs_reciprocal)
 
         # Do some algebra to find the coefficients of the spline
-        a = X[..., :-1]
+        a = x[..., :-1]
         b = knot_derivatives[..., :-1]
         two_c = (six_path_diffs * time_diffs_reciprocal
                  - 4 * knot_derivatives[..., :-1]
@@ -53,17 +53,17 @@ def _natural_cubic_spline_coeffs_without_missing_values(t, X):
     return a, b, two_c, three_d
 
 
-def _natural_cubic_spline_coeffs_with_missing_values(t, X):
-    if len(X.shape) == 1:
+def _natural_cubic_spline_coeffs_with_missing_values(t, x):
+    if x.ndimension() == 1:
         # We have to break everything down to individual scalar paths because of the possibility of missing values
         # being different in different channels
-        return _natural_cubic_spline_coeffs_with_missing_values_scalar(t, X)
+        return _natural_cubic_spline_coeffs_with_missing_values_scalar(t, x)
     else:
         a_pieces = []
         b_pieces = []
         two_c_pieces = []
         three_d_pieces = []
-        for p in X.unbind(dim=0):  # TODO: parallelise over this
+        for p in x.unbind(dim=0):  # TODO: parallelise over this
             a, b, two_c, three_d = _natural_cubic_spline_coeffs_with_missing_values(t, p)
             a_pieces.append(a)
             b_pieces.append(b)
@@ -75,20 +75,20 @@ def _natural_cubic_spline_coeffs_with_missing_values(t, X):
                 misc.cheap_stack(three_d_pieces, dim=0))
 
 
-def _natural_cubic_spline_coeffs_with_missing_values_scalar(t, X):
-    # t and X both have shape (length,)
+def _natural_cubic_spline_coeffs_with_missing_values_scalar(t, x):
+    # t and x both have shape (length,)
 
-    not_nan = ~torch.isnan(X)
-    path_no_nan = X.masked_select(not_nan)
+    not_nan = ~torch.isnan(x)
+    path_no_nan = x.masked_select(not_nan)
 
     if path_no_nan.size(0) == 0:
         # Every entry is a NaN, so we take a constant path with derivative zero, so return zero coefficients.
         # Note that we may assume that X.size(0) >= 2 by the checks in __init__ so "X.size(0) - 1" is a valid
         # thing to do.
-        return (torch.zeros(X.size(0) - 1, dtype=X.dtype, device=X.device),
-                torch.zeros(X.size(0) - 1, dtype=X.dtype, device=X.device),
-                torch.zeros(X.size(0) - 1, dtype=X.dtype, device=X.device),
-                torch.zeros(X.size(0) - 1, dtype=X.dtype, device=X.device))
+        return (torch.zeros(x.size(0) - 1, dtype=x.dtype, device=x.device),
+                torch.zeros(x.size(0) - 1, dtype=x.dtype, device=x.device),
+                torch.zeros(x.size(0) - 1, dtype=x.dtype, device=x.device),
+                torch.zeros(x.size(0) - 1, dtype=x.dtype, device=x.device))
     # else we have at least one non-NaN entry, in which case we're going to impute at least one more entry (as
     # the path is of length at least 2 so the start and the end aren't the same), so we will then have at least two
     # non-Nan entries. In particular we can call _compute_coeffs safely later.
@@ -101,19 +101,19 @@ def _natural_cubic_spline_coeffs_with_missing_values_scalar(t, X):
     # observation at the very end equal to the last actual observation made, and then proceed with splines as
     # normal.
     need_new_not_nan = False
-    if torch.isnan(X[0]):
+    if torch.isnan(x[0]):
         if not need_new_not_nan:
-            X = X.clone()
+            x = x.clone()
             need_new_not_nan = True
-        X[0] = path_no_nan[0]
-    if torch.isnan(X[-1]):
+        x[0] = path_no_nan[0]
+    if torch.isnan(x[-1]):
         if not need_new_not_nan:
-            X = X.clone()
+            x = x.clone()
             need_new_not_nan = True
-        X[-1] = path_no_nan[-1]
+        x[-1] = path_no_nan[-1]
     if need_new_not_nan:
-        not_nan = ~torch.isnan(X)
-        path_no_nan = X.masked_select(not_nan)
+        not_nan = ~torch.isnan(x)
+        path_no_nan = x.masked_select(not_nan)
     times_no_nan = t.masked_select(not_nan)
 
     # Find the coefficients on the pieces we do understand
@@ -155,12 +155,12 @@ def _natural_cubic_spline_coeffs_with_missing_values_scalar(t, X):
 # The mathematics of this are adapted from  http://mathworld.wolfram.com/CubicSpline.html, although they only treat the
 # case of each piece being parameterised by [0, 1]. (We instead take the length of each piece to be the difference in
 # time stamps.)
-def natural_cubic_spline_coeffs(t, X):
+def natural_cubic_spline_coeffs(t, x):
     """Calculates the coefficients of the natural cubic spline approximation to the batch of controls given.
 
     Arguments:
         t: One dimensional tensor of times. Must be monotonically increasing.
-        X: tensor of values, of shape (..., length, input_channels), where ... is some number of batch dimensions. This
+        x: tensor of values, of shape (..., length, input_channels), where ... is some number of batch dimensions. This
             is interpreted as a (batch of) paths taking values in an input_channels-dimensional real vector space, with
             length-many observations. Missing values are supported, and should be represented as NaNs.
 
@@ -188,22 +188,22 @@ def natural_cubic_spline_coeffs(t, X):
 
         See also the accompanying example.py.
     """
-    path.validate_input(t, X)
+    path.validate_input(t, x)
 
-    if torch.isnan(X).any():
+    if torch.isnan(x).any():
         # Transpose because channels are a batch dimension for the purpose of finding interpolating polynomials.
         # b, two_c, three_d have shape (..., channels, length - 1)
-        a, b, two_c, three_d = _natural_cubic_spline_coeffs_with_missing_values(t, X.transpose(-1, -2))
+        a, b, two_c, three_d = _natural_cubic_spline_coeffs_with_missing_values(t, x.transpose(-1, -2))
     else:
         # Can do things more quickly in this case.
-        a, b, two_c, three_d = _natural_cubic_spline_coeffs_without_missing_values(t, X.transpose(-1, -2))
+        a, b, two_c, three_d = _natural_cubic_spline_coeffs_without_missing_values(t, x.transpose(-1, -2))
 
     # These all have shape (..., length - 1, channels)
     a = a.transpose(-1, -2)
     b = b.transpose(-1, -2)
     two_c = two_c.transpose(-1, -2)
     three_d = three_d.transpose(-1, -2)
-    return t, a, b, two_c, three_d
+    return misc.identity(t), a, b, two_c, three_d
 
 
 class NaturalCubicSpline(path.Path):
@@ -212,10 +212,10 @@ class NaturalCubicSpline(path.Path):
     Example:
         times = torch.linspace(0, 1, 7)
         # (2, 1) are batch dimensions. 7 is the time dimension (of the same length as t). 3 is the channel dimension.
-        X = torch.rand(2, 1, 7, 3)
-        coeffs = natural_cubic_spline_coeffs(times, X)
+        x = torch.rand(2, 1, 7, 3)
+        coeffs = natural_cubic_spline_coeffs(times, x)
         # ...at this point you can save the coeffs, put them through PyTorch's Datasets and DataLoaders, etc...
-        spline = NaturalCubicSpline(times, coeffs)
+        spline = NaturalCubicSpline(coeffs)
         t = torch.tensor(0.4)
         # will be a tensor of shape (2, 1, 3), corresponding to batch and channel dimensions
         out = spline.derivative(t)
@@ -239,7 +239,8 @@ class NaturalCubicSpline(path.Path):
 
     def _interpret_t(self, t):
         maxlen = self._b.size(-2) - 1
-        index = (t > self._t).sum() - 1
+        # TODO: switch to a log search not a linear search
+        index = (t.unsqueeze(-1) > self._t).sum(dim=-1) - 1
         index = index.clamp(0, maxlen)  # clamp because t may go outside of [t[0], t[-1]]; this is fine
         # will never access the last element of self._t; this is correct behaviour
         fractional_part = t - self._t[index]
@@ -247,12 +248,14 @@ class NaturalCubicSpline(path.Path):
 
     def evaluate(self, t):
         fractional_part, index = self._interpret_t(t)
+        fractional_part = fractional_part.unsqueeze(-1)
         inner = 0.5 * self._two_c[..., index, :] + self._three_d[..., index, :] * fractional_part / 3
         inner = self._b[..., index, :] + inner * fractional_part
         return self._a[..., index, :] + inner * fractional_part
 
     def derivative(self, t):
         fractional_part, index = self._interpret_t(t)
+        fractional_part = fractional_part.unsqueeze(-1)
         inner = self._two_c[..., index, :] + self._three_d[..., index, :] * fractional_part
         deriv = self._b[..., index, :] + inner * fractional_part
         return deriv

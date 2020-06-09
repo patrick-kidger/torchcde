@@ -1,0 +1,134 @@
+import torch
+import torchcontroldiffeq
+
+
+# Represents a random natural cubic spline with a single knot in the middle
+class _Cubic:
+    def __init__(self, batch_dims, num_channels, start, end):
+        self.a = torch.randn(*batch_dims, num_channels, dtype=torch.float64) * 10
+        self.b = torch.randn(*batch_dims, num_channels, dtype=torch.float64) * 10
+        self.c = torch.randn(*batch_dims, num_channels, dtype=torch.float64) * 10
+        self.d1 = -self.c / (3 * start)
+        self.d2 = -self.c / (3 * end)
+
+    def _normalise_dims(self, t):
+        a = self.a
+        b = self.b
+        c = self.c
+        d1 = self.d1
+        d2 = self.d2
+        for _ in t.shape:
+            a = a.unsqueeze(-2)
+            b = b.unsqueeze(-2)
+            c = c.unsqueeze(-2)
+            d1 = d1.unsqueeze(-2)
+            d2 = d2.unsqueeze(-2)
+        t = t.unsqueeze(-1)
+        d = torch.where(t > 0, d2, d1)
+        return a, b, c, d, t
+
+    def evaluate(self, t):
+        a, b, c, d, t = self._normalise_dims(t)
+        t_sq = t ** 2
+        t_cu = t_sq * t
+        return a + b * t + c * t_sq + d * t_cu
+
+    def derivative(self, t):
+        a, b, c, d, t = self._normalise_dims(t)
+        t_sq = t ** 2
+        return b + 2 * c * t + 3 * d * t_sq
+
+
+def test_interp():
+    for _ in range(3):
+        for drop in (False, True):
+            num_points = torch.randint(low=5, high=100, size=(1,)).item()
+            times1 = torch.rand(num_points // 2, dtype=torch.float64) - 1
+            times2 = torch.rand(num_points // 2, dtype=torch.float64)
+            times = torch.cat([times1, times2, torch.tensor([0.], dtype=torch.float64)]).sort().values
+            num_channels = torch.randint(low=1, high=3, size=(1,)).item()
+            num_batch_dims = torch.randint(low=0, high=3, size=(1,)).item()
+            batch_dims = []
+            for _ in range(num_batch_dims):
+                batch_dims.append(torch.randint(low=1, high=3, size=(1,)).item())
+            cubic = _Cubic(batch_dims, num_channels, start=times[0], end=times[-1])
+            values = cubic.evaluate(times)
+            if drop:
+                for values_slice in values.unbind(dim=-1):
+                    num_drop = int(num_points * torch.randint(low=1, high=4, size=(1,)).item() / 10)
+                    num_drop = min(num_drop, num_points - 4)
+                    to_drop = torch.randperm(num_points - 2)[:num_drop] + 1  # don't drop first or last
+                    values_slice[to_drop] = float('nan')
+            coeffs = torchcontroldiffeq.natural_cubic_spline_coeffs(times, values)
+            spline = torchcontroldiffeq.NaturalCubicSpline(coeffs)
+            _test_equal(batch_dims, num_channels, cubic, spline)
+
+
+def test_linear():
+    start = torch.rand(1).item() * 5 - 2.5
+    end = torch.rand(1).item() * 5 - 2.5
+    start, end = min(start, end), max(start, end)
+    num_points = torch.randint(low=2, high=10, size=(1,)).item()
+    m = torch.rand(1).item() * 5 - 2.5
+    c = torch.rand(1).item() * 5 - 2.5
+    times = torch.linspace(start, end, num_points)
+    values = m * times + c
+    coeffs = torchcontroldiffeq.natural_cubic_spline_coeffs(times, values)
+    spline = torchcontroldiffeq.NaturalCubicSpline(coeffs)
+    coeffs2 = torchcontroldiffeq.linear_interpolation_coeffs(times, values)
+    linear = torchcontroldiffeq.LinearInterpolation(coeffs2)
+    batch_dims = []
+    num_channels = 1
+    _test_equal(batch_dims, num_channels, linear, spline)
+
+
+def test_short():
+    times = torch.tensor([0., 1.])
+    values = torch.rand(2, 1)
+    coeffs = torchcontroldiffeq.natural_cubic_spline_coeffs(times, values)
+    spline = torchcontroldiffeq.NaturalCubicSpline(coeffs)
+    coeffs2 = torchcontroldiffeq.linear_interpolation_coeffs(times, values)
+    linear = torchcontroldiffeq.LinearInterpolation(coeffs2)
+    batch_dims = []
+    num_channels = 1
+    _test_equal(batch_dims, num_channels, linear, spline)
+
+
+# TODO: test other edge cases
+
+
+def _test_equal(batch_dims, num_channels, obj1, obj2):
+    for dimension in (0, 1, 2):
+        sizes = []
+        for _ in range(dimension):
+            sizes.append(torch.randint(low=1, high=4, size=(1,)).item())
+        expected_size = tuple(batch_dims) + tuple(sizes) + (num_channels,)
+        eval_times = torch.rand(sizes, dtype=torch.float64) * 3 - 1.5
+        obj1_evaluate = obj1.evaluate(eval_times)
+        obj2_evaluate = obj2.evaluate(eval_times)
+        obj1_derivative = obj1.derivative(eval_times)
+        obj2_derivative = obj2.derivative(eval_times)
+        assert obj1_evaluate.shape == expected_size
+        assert obj2_evaluate.shape == expected_size
+        assert obj1_derivative.shape == expected_size
+        assert obj2_derivative.shape == expected_size
+        assert obj1_evaluate.allclose(obj2_evaluate)
+        assert obj1_derivative.allclose(obj2_derivative)
+
+
+def test_specification():
+    for _ in range(10):
+        for num_batch_dims in (0, 1, 2, 3):
+            batch_dims = []
+            for _ in range(num_batch_dims):
+                batch_dims.append(torch.randint(low=1, high=3, size=(1,)).item())
+            length = torch.randint(low=5, high=10, size=(1,)).item()
+            channels = torch.randint(low=1, high=5, size=(1,)).item()
+            t = torch.linspace(0, 1, length, dtype=torch.float64)
+            x = torch.rand(*batch_dims, length, channels, dtype=torch.float64)
+            coeffs = torchcontroldiffeq.natural_cubic_spline_coeffs(t, x)
+            spline = torchcontroldiffeq.NaturalCubicSpline(coeffs)
+            for i, point in enumerate(t):
+                out = spline.evaluate(point)
+                xi = x[..., i, :]
+                assert out.allclose(xi)

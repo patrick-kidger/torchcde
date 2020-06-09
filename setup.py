@@ -23,7 +23,7 @@ author_email = 'contact@kidger.site'
 description = "Differentiable controlled differential equation solvers for PyTorch with GPU support and " \
               "memory-efficient adjoint backpropagation."
 
-with io.open(os.path.join(here, 'README.me'), 'r', encoding='utf-8') as f:
+with io.open(os.path.join(here, 'README.md'), 'r', encoding='utf-8') as f:
     readme = f.read()
 
 url = "https://github.com/patrick-kidger/torchcontroldiffeq"
@@ -52,6 +52,8 @@ classifiers = ["Development Status :: 3 - Alpha",
 
 python_requires = ">=3.5, <4"
 
+install_requires = ['torch>=1.0.0', 'torchdiffeq>=0.0.1']
+
 setuptools.setup(name=name,
                  version=version,
                  author=author,
@@ -65,4 +67,5 @@ setuptools.setup(name=name,
                  classifiers=classifiers,
                  zip_safe=False,
                  python_requires=python_requires,
+                 install_requires=install_requires,
                  packages=[name])
