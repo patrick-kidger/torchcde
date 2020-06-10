@@ -50,6 +50,7 @@ class _VectorField(torch.nn.Module):
         # first place.
         #
         # (And if you do want gradients wrt times - just don't use linear interpolation!)
+        t_with_grad = t
         if self.t_not_requires_grad:
             t = t.detach()
 
@@ -60,6 +61,15 @@ class _VectorField(torch.nn.Module):
         # out is of shape (..., hidden_channels)
         # (The squeezing is necessary to make the matrix-multiply properly batch in all cases)
         out = (vector_field @ control_gradient.unsqueeze(-1)).squeeze(-1)
+
+        # Workaround for PyTorch bug #39784
+        dummy = torch.as_strided(t_with_grad, (), ())
+        dummy = dummy + torch.as_strided(z, (), ())
+        for param in self.parameters():
+            dummy = dummy + torch.as_strided(param, (), ())
+        dummy = dummy * 0
+        out = out + dummy
+
         return (out,)
 
 

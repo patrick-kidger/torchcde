@@ -1,7 +1,7 @@
 # Differences to `controldiffeq`
 We've made a couple changes since [`controldiffeq`](https://github.com/patrick-kidger/NeuralCDE/tree/master/controldiffeq), either for consistency with other libraries or for technical reasons.
 
-- `cdeint` now takes `X` rather than `dX_dt` as an argument. Besides being a little easier to use, this change is actually what makes it possible on a technical level to stack Neural CDEs on top of one another (that is, driving one Neural CDE with the output of another Neural CDE).
+- `cdeint` now takes `X` rather than `dX_dt` as an argument. Besides being a little easier to use, this change actually makes it possible on a technical level to stack Neural CDEs on top of one another (that is, to drive one Neural CDE with the output of another Neural CDE).
 
 - The arguments for `cdeint` have been re-ordered. This is for consistency with `torchdiffeq.odeint`.
 

@@ -30,7 +30,7 @@ url = "https://github.com/patrick-kidger/torchcontroldiffeq"
 
 license = "Apache-2.0"
 
-classifiers = ["Development Status :: 3 - Alpha",
+classifiers = ["Development Status :: 4 - Beta",
                "Intended Audience :: Developers",
                "Intended Audience :: Financial and Insurance Industry",
                "Intended Audience :: Information Technology",

@@ -2,9 +2,9 @@
 # So you want to train a Neural CDE model?
 # Let's get started!
 ######################
-import torchcontroldiffeq
 import math
 import torch
+import torchcontroldiffeq
 
 
 ######################

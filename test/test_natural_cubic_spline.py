@@ -112,8 +112,8 @@ def _test_equal(batch_dims, num_channels, obj1, obj2, dtype):
         assert obj2_evaluate.shape == expected_size
         assert obj1_derivative.shape == expected_size
         assert obj2_derivative.shape == expected_size
-        assert obj1_evaluate.allclose(obj2_evaluate, rtol=1e-4, atol=1e-6)
-        assert obj1_derivative.allclose(obj2_derivative, rtol=1e-4, atol=1e-6)
+        assert obj1_evaluate.allclose(obj2_evaluate, rtol=1e-4, atol=1e-4   )
+        assert obj1_derivative.allclose(obj2_derivative, rtol=1e-4, atol=1e-4)
 
 
 def test_specification():
