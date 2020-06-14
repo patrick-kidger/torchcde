@@ -1,7 +1,12 @@
+import math
 import torch
 
 from . import path
 from . import misc
+
+
+_two_pi = 2 * math.pi
+_inv_two_pi = 1 / _two_pi
 
 
 def _linear_interpolation_coeffs_with_missing_values_scalar(t, x):
@@ -94,9 +99,6 @@ def linear_interpolation_coeffs(t, x):
         If there are missing values then calling this function can be pretty slow. Make sure to cache the result, and
         don't reinstantiate it on every forward pass, if at all possible.
 
-        Note that linear interpolation will usually make solving the CDE about 10x slower than natural cubic splines, if
-        using a variable step size solver, so this function is usually not recommended over natural cubic splines.
-
     Returns:
         A tensor, which should in turn be passed to `torchcontroldiffeq.LinearInterpolation`.
 
@@ -113,11 +115,13 @@ def linear_interpolation_coeffs(t, x):
 class LinearInterpolation(path.Path):
     """Calculates the linear interpolation to the batch of controls given. Also calculates its derivative."""
 
-    def __init__(self, t, coeffs, **kwargs):
+    def __init__(self, t, coeffs, reparameterise=True, **kwargs):
         """
         Arguments:
             t: As passed to linear_interpolation_coeffs.
             coeffs: As returned by linear_interpolation_coeffs.
+            reparameterise: If True (the default), then the speed of the interpolation will increase between knots and
+                slow down near them. This helps adaptive step solvers resolve the path more easily.
         """
         super(LinearInterpolation, self).__init__(**kwargs)
 
@@ -126,6 +130,9 @@ class LinearInterpolation(path.Path):
         self._t = path.ComputedParameter(t)
         self._coeffs = path.ComputedParameter(coeffs)
         self._derivs = path.ComputedParameter(derivs)
+        # assert 0 <= reparametrise, "reparameterise must be between 0 and 1"
+        # assert reparametrise <= 1, "reparameterise must be between 0 and 1"
+        self._reparameterise = reparameterise
 
     def _interpret_t(self, t):
         t = torch.as_tensor(t, dtype=self._derivs.dtype)
@@ -144,8 +151,22 @@ class LinearInterpolation(path.Path):
         next_coeff = self._coeffs[..., index + 1, :]
         prev_t = self._t[index]
         next_t = self._t[index + 1]
-        return prev_coeff + fractional_part * (next_coeff - prev_coeff) / (next_t - prev_t).unsqueeze(-1)
+        diff_t = next_t - prev_t
+        if self._reparameterise:
+            fractional_part = fractional_part - diff_t * _inv_two_pi * torch.sin(_two_pi * fractional_part / diff_t)
+        return prev_coeff + fractional_part * (next_coeff - prev_coeff) / diff_t.unsqueeze(-1)
 
     def derivative(self, t):
-        _, index = self._interpret_t(t)
-        return self._derivs[..., index, :]
+        fractional_part, index = self._interpret_t(t)
+        deriv = self._derivs[..., index, :]
+
+        if self._reparameterise:
+            prev_t = self._t[index]
+            next_t = self._t[index + 1]
+            diff_t = next_t - prev_t
+
+            fractional_part = fractional_part / diff_t
+            mult = 1 - torch.cos(_two_pi * fractional_part)
+
+            deriv = deriv * mult
+        return deriv

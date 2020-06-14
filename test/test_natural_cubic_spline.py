@@ -116,7 +116,7 @@ def _test_equal(batch_dims, num_channels, obj1, obj2, dtype):
         assert obj1_derivative.allclose(obj2_derivative, rtol=1e-4, atol=1e-4)
 
 
-def test_specification():
+def test_specification_and_derivative():
     for _ in range(10):
         for num_batch_dims in (0, 1, 2, 3):
             batch_dims = []
@@ -128,7 +128,22 @@ def test_specification():
             x = torch.rand(*batch_dims, length, channels, dtype=torch.float64)
             coeffs = torchcontroldiffeq.natural_cubic_spline_coeffs(t, x)
             spline = torchcontroldiffeq.NaturalCubicSpline(t, coeffs)
+            # Test specification
             for i, point in enumerate(t):
-                out = spline.evaluate(point)
+                evaluate = spline.evaluate(point)
                 xi = x[..., i, :]
-                assert out.allclose(xi)
+                assert evaluate.allclose(xi, atol=1e-5, rtol=1e-5)
+            # Test derivative
+            for point in torch.rand(100, dtype=torch.float64):
+                point_with_grad = point.detach().requires_grad_(True)
+                evaluate = spline.evaluate(point_with_grad)
+                derivative = spline.derivative(point)
+                autoderivative = []
+                for elem in evaluate.view(-1):
+                    elem.backward(retain_graph=True)
+                    with torch.no_grad():
+                        autoderivative.append(point_with_grad.grad.clone())
+                    point_with_grad.grad.zero_()
+                autoderivative = torch.stack(autoderivative).view(*evaluate.shape)
+                assert derivative.shape == autoderivative.shape
+                assert derivative.allclose(autoderivative, atol=1e-5, rtol=1e-5)
