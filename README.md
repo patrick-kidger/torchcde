@@ -14,7 +14,7 @@ pip install git+https://github.com/patrick-kidger/torchcontroldiffeq.git
 ```
 
 ## Example
-We strongly encourage looking at [example.py](./example/example.py), which demonstrates how to train a Neural CDE model to predict the chirality of a spiral.
+We encourage looking at [example.py](./example/example.py), which demonstrates how to use the library to train a Neural CDE model to predict the chirality of a spiral.
 
 ## Citation
 If you found use this library useful, we would appreciate a citation:
@@ -30,7 +30,7 @@ If you found use this library useful, we would appreciate a citation:
 
 ## Documentation
 
-The library consists of two main components: integrators for solving the controlled differential equation, and ways of constructing controls from data.
+The library consists of two main components: (1) integrators for solving controlled differential equations, and (2) ways of constructing controls from data.
 
 ### Integrators
 
