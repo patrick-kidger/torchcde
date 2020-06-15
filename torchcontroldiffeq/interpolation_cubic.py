@@ -4,18 +4,6 @@ from . import path
 from . import misc
 
 
-class Record(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, x, name):
-        ctx.name = name
-        return x
-
-    @staticmethod
-    def backward(ctx, x):
-        print(ctx.name)
-        return x, None
-
-
 def _natural_cubic_spline_coeffs_without_missing_values(t, x):
     # x should be a tensor of shape (..., length)
     # Will return the b, two_c, three_d coefficients of the derivative of the cubic spline interpolating the path.

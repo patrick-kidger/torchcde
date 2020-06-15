@@ -115,13 +115,14 @@ def linear_interpolation_coeffs(t, x):
 class LinearInterpolation(path.Path):
     """Calculates the linear interpolation to the batch of controls given. Also calculates its derivative."""
 
-    def __init__(self, t, coeffs, reparameterise=True, **kwargs):
+    def __init__(self, t, coeffs, reparameterise=False, **kwargs):
         """
         Arguments:
             t: As passed to linear_interpolation_coeffs.
             coeffs: As returned by linear_interpolation_coeffs.
-            reparameterise: If True (the default), then the speed of the interpolation will increase between knots and
-                slow down near them. This helps adaptive step solvers resolve the path more easily.
+            reparameterise: If set to True, then the speed of the interpolation will increase between knots and
+                slow down near them. This helps adaptive step solvers resolve the path more easily. Note that if using
+                a fixed step solver, then this isn't helpful, and is probably best left on False.
         """
         super(LinearInterpolation, self).__init__(**kwargs)
 

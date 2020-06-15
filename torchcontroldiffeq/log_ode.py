@@ -75,9 +75,10 @@ def logsignature_windows(t, x, depth, window_length):
     first_increment[..., :x.size(-1)] = x[..., 0, :]
     logsignatures = [first_increment]
     compute_logsignature = signatory.Logsignature(depth=depth)
-    for index, next_index in zip(new_t_indices[:-1], new_t_indices[1:]):
+    for index, next_index, time, next_time in zip(new_t_indices[:-1], new_t_indices[1:], new_t[:-1], new_t[1:]):
         logsignature = compute_logsignature(flatten_X[..., index:next_index + 1, :])
-        logsignatures.append(logsignature.view(*batch_dimensions, -1))
+        logsignature = logsignature.view(*batch_dimensions, -1) * (next_time - time)
+        logsignatures.append(logsignature)
 
     logsignatures = torch.stack(logsignatures, dim=-2)
     logsignatures = logsignatures.cumsum(dim=-2)
