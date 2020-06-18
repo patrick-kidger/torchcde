@@ -9,7 +9,7 @@ except ImportError:
 import torch
 
 from . import interpolation_linear
-from . import path
+from . import misc
 
 
 def logsignature_windows(t, x, depth, window_length):
@@ -33,7 +33,7 @@ def logsignature_windows(t, x, depth, window_length):
     Returns:
         A tuple of two tensors, which are the times and values of the transformed path.
     """
-    path.validate_input(t, x)
+    misc.validate_input_path(t, x)
 
     # slightly roundabout way of doing things (rather than using arange) so that it's constructed differentiably
     timespan = t[-1] - t[0]

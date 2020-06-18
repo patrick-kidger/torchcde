@@ -2,14 +2,6 @@ import torch
 import torchcontroldiffeq.misc  # testing an implementation detail
 
 
-def test_identity():
-    x = torch.rand(1)
-    y = torchcontroldiffeq.misc.identity(x)
-    assert x.shape == y.shape
-    assert (x == y).all()
-    assert y is not x
-
-
 def test_cheap_stack():
     for num in range(1, 4):
         for dim in (-2, -1, 0, 1):

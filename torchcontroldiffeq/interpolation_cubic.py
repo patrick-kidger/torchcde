@@ -1,6 +1,5 @@
 import torch
 
-from . import path
 from . import misc
 
 
@@ -188,7 +187,7 @@ def natural_cubic_spline_coeffs(t, x):
 
         See also the accompanying example.py.
     """
-    path.validate_input(t, x)
+    misc.validate_input_path(t, x)
 
     if torch.isnan(x).any():
         # Transpose because channels are a batch dimension for the purpose of finding interpolating polynomials.
@@ -206,7 +205,7 @@ def natural_cubic_spline_coeffs(t, x):
     return a, b, two_c, three_d
 
 
-class NaturalCubicSpline(path.Path):
+class NaturalCubicSpline(torch.nn.Module):
     """Calculates the natural cubic spline approximation to the batch of controls given. Also calculates its derivative.
 
     Example:
@@ -231,15 +230,15 @@ class NaturalCubicSpline(path.Path):
 
         a, b, two_c, three_d = coeffs
 
-        self._t = path.ComputedParameter(t)
-        self._a = path.ComputedParameter(a)
-        self._b = path.ComputedParameter(b)
+        misc.register_computed_parameter(self, '_t', t)
+        misc.register_computed_parameter(self, '_a', a)
+        misc.register_computed_parameter(self, '_b', b)
         # as we're typically computing derivatives, we store the multiples of these coefficients that are more useful
-        self._two_c = path.ComputedParameter(two_c)
-        self._three_d = path.ComputedParameter(three_d)
+        misc.register_computed_parameter(self, '_two_c', two_c)
+        misc.register_computed_parameter(self, '_three_d', three_d)
 
     def _interpret_t(self, t):
-        t = torch.as_tensor(t, dtype=self._b.dtype)
+        t = torch.as_tensor(t, dtype=self._b.dtype,  device=self._b.device)
         maxlen = self._b.size(-2) - 1
         # TODO: switch to a log search not a linear search
         index = (t.unsqueeze(-1) > self._t).sum(dim=-1) - 1

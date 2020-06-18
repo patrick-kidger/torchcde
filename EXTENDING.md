@@ -5,14 +5,10 @@ This file contains some 'developer notes' which you might find helpful if you wa
 
 The `X` argument to `torchcontroldiffeq.cdeint` will typically be one of the default interpolation strategies available in this library (linear or natural cubic spline). For most purposes they are probably sufficient.
 
-But there's no reason you can't define your own! There are two technical caveats to observe to make sure things work, however.
+But there's no reason you can't define your own!
 
-#### The rules
+#### Things to do:
 
-- First of all, whatever your interpolation / curve-fitting / etc. strategy is, it should inherit from `torchcontroldiffeq.Path`, and implement the `derivative(t)` (and optionally `evaluate(t)`) methods.
+- `X` should be an instance of `torch.nn.Module`, and you should implement a `derivative(t)` method, taking a scalar tensor `t`.
 
-- Second, your path probably depends on some tensors that you've computed from the data. When recording these tensors in `__init__`, make sure to wrap them in `torchcontroldiffeq.ComputedParameter`s. (See how it's done in the existing strategies for an example; see `interpolation_linear.py`.)
-
-#### Why these rules?
-
-These rules are necessary to make sure that the adjoint-based backpropagation works correctly. Wrapping any computed tensors in `ComputedParameter`, and assigning them to something subclassing `Path`, will between them ensure that these tensors get registered with the autograd framework in the correct way.
+- `X` probably depends on some tensors that you've computed from the data. Let the adjoint method know that you want gradients with respect to these by registering them via `torchcontroldiffeq.register_computed_parameter(...)`, in `__init__(...)`. (See `interpolation_linear.py` for an example of how it's done.)

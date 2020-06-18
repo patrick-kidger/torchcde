@@ -1,7 +1,6 @@
 import math
 import torch
 
-from . import path
 from . import misc
 
 
@@ -105,14 +104,14 @@ def linear_interpolation_coeffs(t, x):
         See the docstring for `torchcontroldiffeq.natural_cubic_spline_coeffs` for more information on why we do it this
         way.
     """
-    path.validate_input(t, x)
+    misc.validate_input_path(t, x)
 
     if torch.isnan(x).any():
         x = _linear_interpolation_coeffs_with_missing_values(t, x.transpose(-1, -2)).transpose(-1, -2)
     return x
 
 
-class LinearInterpolation(path.Path):
+class LinearInterpolation(torch.nn.Module):
     """Calculates the linear interpolation to the batch of controls given. Also calculates its derivative."""
 
     def __init__(self, t, coeffs, reparameterise=False, **kwargs):
@@ -128,13 +127,13 @@ class LinearInterpolation(path.Path):
 
         derivs = (coeffs[..., 1:, :] - coeffs[..., :-1, :]) / (t[1:] - t[:-1]).unsqueeze(-1)
 
-        self._t = path.ComputedParameter(t)
-        self._coeffs = path.ComputedParameter(coeffs)
-        self._derivs = path.ComputedParameter(derivs)
+        misc.register_computed_parameter(self, '_t', t)
+        misc.register_computed_parameter(self, '_coeffs', coeffs)
+        misc.register_computed_parameter(self, '_derivs', derivs)
         self._reparameterise = reparameterise
 
     def _interpret_t(self, t):
-        t = torch.as_tensor(t, dtype=self._derivs.dtype)
+        t = torch.as_tensor(t, dtype=self._derivs.dtype, device=self._derivs.device)
         maxlen = self._derivs.size(-2) - 1
         # TODO: switch to a log search not a linear search
         index = (t.unsqueeze(-1) > self._t).sum(dim=-1) - 1
