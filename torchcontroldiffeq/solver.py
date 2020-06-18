@@ -57,7 +57,7 @@ class _VectorField(torch.nn.Module):
         # control_gradient is of shape (..., input_channels)
         control_gradient = self.X.derivative(t)
         # vector_field is of shape (..., hidden_channels, input_channels)
-        vector_field = self.func(z)
+        vector_field = self.func(t, z)
         # out is of shape (..., hidden_channels)
         # (The squeezing is necessary to make the matrix-multiply properly batch in all cases)
         out = (vector_field @ control_gradient.unsqueeze(-1)).squeeze(-1)
@@ -78,7 +78,7 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
 
     Solves the controlled problem:
     ```
-    z_t = z_{t_0} + \int_{t_0}^t f(z_s) dX_s
+    z_t = z_{t_0} + \int_{t_0}^t f(s, z_s) dX_s
     ```
     where z is a tensor of any shape, and X is some controlling signal.
 
@@ -88,8 +88,8 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
             anything else; e.g. the changing hidden states of a Neural CDE.) The derivative at a point will be computed
             via this argument, and will have shape (..., input_channels), where '...' is some number of batch dimensions
             and input_channels is the number of channels in the input path.
-        func: Should be an instance of `torch.nn.Module`. Describes the vector field f(z). Will be called with a tensor
-            z of shape (..., hidden_channels), and should return a tensor of shape
+        func: Should be an instance of `torch.nn.Module`. Describes the vector field f(t, z). Will be called with a
+            scalar tensor t and a tensor z of shape (..., hidden_channels), and should return a tensor of shape
             (..., hidden_channels, input_channels), where hidden_channels and input_channels are integers defined by the
             `hidden_shape` and `X` arguments as above. The '...' corresponds to some number of batch dimensions.
         z0: The initial state of the solution. It should have shape (..., hidden_channels), where '...' is some number
@@ -101,8 +101,8 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
             that seem to work best are dopri5, euler, midpoint, rk4. Avoid all three Adams methods.
 
     Returns:
-        The value of each z_{t_i} of the solution to the CDE z_t = z_{t_0} + \int_0^t f(z_s)dX_s, where t_i = t[i]. This
-        will be a tensor of shape (..., len(t), hidden_channels).
+        The value of each z_{t_i} of the solution to the CDE z_t = z_{t_0} + \int_0^t f(s, z_s)dX_s, where t_i = t[i].
+        This will be a tensor of shape (..., len(t), hidden_channels).
 
     Raises:
         ValueError for malformed inputs.
@@ -157,30 +157,30 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
                          "(meaning {} batch dimensions)."
                          "".format(tuple(control_gradient.shape), tuple(control_gradient.shape[:-1]), tuple(z0.shape),
                                    tuple(z0.shape[:-1])))
-    vector_field = func(z0)
-    if vector_field.shape[:-2] != z0.shape[:-1]:
+    system = func(t[0], z0)
+    if system.shape[:-2] != z0.shape[:-1]:
         raise ValueError("func did not return a tensor with the same number of batch dimensions as z0. func returned "
                          "shape {} (meaning {} batch dimensions)), whilst z0 has shape {} (meaning {} batch"
                          " dimensions)."
-                         "".format(tuple(vector_field.shape), tuple(vector_field.shape[:-2]), tuple(z0.shape),
+                         "".format(tuple(system.shape), tuple(system.shape[:-2]), tuple(z0.shape),
                                    tuple(z0.shape[:-1])))
-    if vector_field.size(-2) != z0.shape[-1]:
+    if system.size(-2) != z0.shape[-1]:
         raise ValueError("func did not return a tensor with the same number of hidden channels as z0. func returned "
                          "shape {} (meaning {} channels), whilst z0 has shape {} (meaning {} channels)."
-                         "".format(tuple(vector_field.shape), vector_field.size(-2), tuple(z0.shape),
+                         "".format(tuple(system.shape), system.size(-2), tuple(z0.shape),
                                    z0.shape.size(-1)))
-    if vector_field.size(-1) != control_gradient.size(-1):
+    if system.size(-1) != control_gradient.size(-1):
         raise ValueError("func did not return a tensor with the same number of input channels as X.derivative "
                          "returned. func returned shape {} (meaning {} channels), whilst X.derivative returned shape "
                          "{} (meaning {} channels)."
-                         "".format(tuple(vector_field.shape), vector_field.size(-1), tuple(control_gradient.shape),
+                         "".format(tuple(system.shape), system.size(-1), tuple(control_gradient.shape),
                                    control_gradient.size(-1)))
 
     vector_field = _VectorField(X=X, func=func, t_requires_grad=t.requires_grad, adjoint=adjoint)
     odeint = torchdiffeq.odeint_adjoint if adjoint else torchdiffeq.odeint
     # Note how we pass in and unwrap a tuple to avoid torchdiffeq wrapping vector_field in something that isn't
     # computed-parameter aware.
-    # I don't like depending on an implementation detail of torchdiffeq like this but I don't see any other options
+    # I don't like depending on an implementation detail of torchdiffeq like this but I don't see many other options
     # that don't involve directly modifying torch.nn.Module (probably best to stay away from that).
     out = odeint(func=vector_field, y0=(z0,), t=t, **kwargs)[0]
 

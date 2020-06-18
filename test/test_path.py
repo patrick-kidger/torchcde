@@ -126,7 +126,7 @@ class _Func(torch.nn.Module):
         self.hidden_size = hidden_size
         self.variable = torch.nn.Parameter(torch.rand(1, 1, input_size))
 
-    def forward(self, z):
+    def forward(self, t, z):
         assert z.shape == (1, self.hidden_size)
         out = z.sigmoid().unsqueeze(-1) + self.variable
         assert out.shape == (1, self.hidden_size, self.input_size)

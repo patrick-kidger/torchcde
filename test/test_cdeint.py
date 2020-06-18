@@ -24,7 +24,7 @@ def test_shape():
                     super(_Func, self).__init__()
                     self.variable = torch.nn.Parameter(torch.rand(*[1 for _ in range(num_batch_dims)], 1, num_channels))
 
-                def forward(self, z):
+                def forward(self, t, z):
                     return z.sigmoid().unsqueeze(-1) + self.variable
 
             f = _Func()

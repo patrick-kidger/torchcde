@@ -51,7 +51,7 @@ def test_small():
     x = torch.rand(2, 1, dtype=torch.float64)
     true_deriv = (x[1] - x[0]) / (end - start)
     coeffs = torchcontroldiffeq.linear_interpolation_coeffs(t, x)
-    linear = torchcontroldiffeq.LinearInterpolation(t, coeffs, reparametrise=False)
+    linear = torchcontroldiffeq.LinearInterpolation(t, coeffs, reparameterise=False)
     for time in torch.linspace(-1, 2, 100):
         true = x[0] + true_deriv * (time - t[0])
         pred = linear.evaluate(time)

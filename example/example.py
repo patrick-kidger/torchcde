@@ -29,7 +29,11 @@ class CDEFunc(torch.nn.Module):
         self.linear1 = torch.nn.Linear(hidden_channels, 128)
         self.linear2 = torch.nn.Linear(128, input_channels * hidden_channels)
 
-    def forward(self, z):
+    ######################
+    # For most purposes the t argument can probably be ignored; unless you want your CDE to behave differently at
+    # different times, which would be unusual. But it's there if you need it!
+    ######################
+    def forward(self, t, z):
         z = self.linear1(z)
         z = torch.tanh(z)
         z = self.linear2(z)

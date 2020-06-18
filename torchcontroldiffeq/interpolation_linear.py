@@ -131,8 +131,6 @@ class LinearInterpolation(path.Path):
         self._t = path.ComputedParameter(t)
         self._coeffs = path.ComputedParameter(coeffs)
         self._derivs = path.ComputedParameter(derivs)
-        # assert 0 <= reparametrise, "reparameterise must be between 0 and 1"
-        # assert reparametrise <= 1, "reparameterise must be between 0 and 1"
         self._reparameterise = reparameterise
 
     def _interpret_t(self, t):
