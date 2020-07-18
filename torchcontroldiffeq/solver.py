@@ -20,22 +20,12 @@ class _VectorField(torch.nn.Module):
         self.func = func
         self.t_not_requires_grad = adjoint and not t_requires_grad
 
-    def parameters(self):
-        yield from super(_VectorField, self).parameters()
-        # Makes sure that the adjoint method sees relevant non-leaf tensors to compute derivatives wrt to.
-        for buffer in self.X.buffers():
-            if buffer.requires_grad:
-                yield buffer
-
     def __call__(self, t, z):
-        # Use tupled input to avoid torchdiffeq doing it for us and breaking the parameters() we've created above.
-        z = z[0]
-
         # So what's up with this then?
         #
         # First of all, this only applies if we're using the adjoint method, so this doesn't change anything in the
         # non-adjoint case. In the adjoint case, however, the derivative wrt t is only used to compute the derivative
-        # wrt the input times, and the derivative wrt z is only used to compute the derivative wrt the initial z0.
+        # wrt the input times.
         #
         # By default torchdiffeq computes all of these gradients regardless, and any ones that aren't needed just get
         # discarded. So for one thing, detaching here gives us a speedup.
@@ -49,8 +39,7 @@ class _VectorField(torch.nn.Module):
         # tell torchdiffeq that we don't have a gradient wrt that input, so it doesn't bother calculating it in the
         # first place.
         #
-        # (And if you do want gradients wrt times - just don't use linear interpolation!)
-        t_with_grad = t
+        # (And if you do want gradients wrt times - don't use linear interpolation!)
         if self.t_not_requires_grad:
             t = t.detach()
 
@@ -62,15 +51,7 @@ class _VectorField(torch.nn.Module):
         # (The squeezing is necessary to make the matrix-multiply properly batch in all cases)
         out = (vector_field @ control_gradient.unsqueeze(-1)).squeeze(-1)
 
-        # Workaround for PyTorch bug #39784
-        dummy = torch.as_strided(t_with_grad, (), ())
-        dummy = dummy + torch.as_strided(z, (), ())
-        for param in self.parameters():
-            dummy = dummy + torch.as_strided(param, (), ())
-        dummy = dummy * 0
-        out = out + dummy
-
-        return (out,)
+        return out
 
 
 def cdeint(X, func, z0, t, adjoint=True, **kwargs):
@@ -127,8 +108,7 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
         kwargs['rtol'] = 1e-3
 
     if not isinstance(X, torch.nn.Module):
-        raise ValueError("X must be an instance of torch.nn.Module, so that we can correctly find the parameters for "
-                         "the adjoint method.")
+        raise ValueError("X must be an instance of torch.nn.Module.")
     if not hasattr(X, 'derivative'):
         raise ValueError("X must have a 'derivative' method.")
     control_gradient = X.derivative(t[0].detach())
@@ -159,11 +139,7 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
 
     vector_field = _VectorField(X=X, func=func, t_requires_grad=t.requires_grad, adjoint=adjoint)
     odeint = torchdiffeq.odeint_adjoint if adjoint else torchdiffeq.odeint
-    # Note how we pass in and unwrap a tuple to avoid torchdiffeq wrapping vector_field in something that isn't
-    # computed-parameter aware.
-    # I don't like depending on an implementation detail of torchdiffeq like this but I don't see many other options
-    # that don't involve directly modifying torch.nn.Module (probably best to stay away from that).
-    out = odeint(func=vector_field, y0=(z0,), t=t, **kwargs)[0]
+    out = odeint(func=vector_field, y0=z0, t=t, **kwargs)
 
     batch_dims = range(1, len(out.shape) - 1)
     out = out.permute(*batch_dims, 0, -1)

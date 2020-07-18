@@ -17,4 +17,8 @@ We've made a few changes since [`controldiffeq`](https://github.com/patrick-kidg
 
 - The system `func` (the argument to `cdeint`) now also accepts time `t` as an argument when called. (Rather than just the state `z`.)
 
-- The sequence dimension of the tensor returned from `cdeint` is now the second-to-last one (rather than the first one) so that the result is now of shape `(...batch dimensions..., length, channels)`. This fixes an inconsistency between the location of the sequence dimension for inputs and outputs.
+## Other changes
+
+- The default `atol` and `rtol` for `cdeint` are now dramatically reduced down to `1e-3`. This speeds up the default settings a lot, and still seems to work just fine in terms of empirical performance.
+
+- The sequence dimension of the tensor returned from `cdeint` is now the second-to-last one (rather than the first one) so that the result is now of shape `(...batch dimensions..., length, channels)`. This fixes an inconsistency between the location of the sequence dimension for inputs and outputs. (But is now no longer the same as in `torchdiffeq`.)
