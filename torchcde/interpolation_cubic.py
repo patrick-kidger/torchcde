@@ -171,11 +171,11 @@ def natural_cubic_spline_coeffs(t, x):
         don't reinstantiate it on every forward pass, if at all possible.
 
     Returns:
-        A tuple of four tensors, which should in turn be passed to `torchcontroldiffeq.NaturalCubicSpline`.
+        A tuple of four tensors, which should in turn be passed to `torchcde.NaturalCubicSpline`.
 
         Why do we do it like this? Because typically you want to use PyTorch tensors at various interfaces, for example
         when loading a batch from a DataLoader. If we wrapped all of this up into just the
-        `torchcontroldiffeq.NaturalCubicSpline` class then that sort of thing wouldn't be possible.
+        `torchcde.NaturalCubicSpline` class then that sort of thing wouldn't be possible.
 
         As such the suggested use is to:
         (a) Load your data.
@@ -224,7 +224,7 @@ class NaturalCubicSpline(torch.nn.Module):
         """
         Arguments:
             t: As passed to linear_interpolation_coeffs.
-            coeffs: As returned by `torchcontroldiffeq.natural_cubic_spline_coeffs`.
+            coeffs: As returned by `torchcde.natural_cubic_spline_coeffs`.
         """
         super(NaturalCubicSpline, self).__init__(**kwargs)
 

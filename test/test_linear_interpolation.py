@@ -1,5 +1,5 @@
 import torch
-import torchcontroldiffeq
+import torchcde
 
 
 def test_random():
@@ -30,8 +30,8 @@ def test_random():
                         to_drop = torch.randperm(num_points - 2)[:num_drop] + 1  # don't drop first or last
                         values_slice[to_drop] = float('nan')
 
-                coeffs = torchcontroldiffeq.linear_interpolation_coeffs(times, values_clone)
-                linear = torchcontroldiffeq.LinearInterpolation(times, coeffs, reparameterise)
+                coeffs = torchcde.linear_interpolation_coeffs(times, values_clone)
+                linear = torchcde.LinearInterpolation(times, coeffs, reparameterise)
 
                 for time, value in zip(times, values):
                     linear_evaluate = linear.evaluate(time)
@@ -50,8 +50,8 @@ def test_small():
     t = torch.tensor([start, end], dtype=torch.float64)
     x = torch.rand(2, 1, dtype=torch.float64)
     true_deriv = (x[1] - x[0]) / (end - start)
-    coeffs = torchcontroldiffeq.linear_interpolation_coeffs(t, x)
-    linear = torchcontroldiffeq.LinearInterpolation(t, coeffs, reparameterise=False)
+    coeffs = torchcde.linear_interpolation_coeffs(t, x)
+    linear = torchcde.LinearInterpolation(t, coeffs, reparameterise=False)
     for time in torch.linspace(-1, 2, 100):
         true = x[0] + true_deriv * (time - t[0])
         pred = linear.evaluate(time)
@@ -73,8 +73,8 @@ def test_specification_and_derivative():
                 channels = torch.randint(low=1, high=5, size=(1,)).item()
                 t = torch.linspace(0, 1, length, dtype=torch.float64)
                 x = torch.rand(*batch_dims, length, channels, dtype=torch.float64)
-                coeffs = torchcontroldiffeq.linear_interpolation_coeffs(t, x)
-                spline = torchcontroldiffeq.LinearInterpolation(t, coeffs, reparameterise)
+                coeffs = torchcde.linear_interpolation_coeffs(t, x)
+                spline = torchcde.LinearInterpolation(t, coeffs, reparameterise)
                 # Test specification
                 for i, point in enumerate(t):
                     evaluate = spline.evaluate(point)

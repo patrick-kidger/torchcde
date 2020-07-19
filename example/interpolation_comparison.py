@@ -24,7 +24,7 @@
 ######################
 
 import torch
-import torchcontroldiffeq
+import torchcde
 
 
 t = torch.linspace(0, 1, 1000)
@@ -40,7 +40,7 @@ class Func(torch.nn.Module):
     def reset_nfe(self):
         self.nfe = 0
 
-    def forward(self, z):
+    def forward(self, t, z):
         self.nfe += 1
         return z.sigmoid().unsqueeze(-1) + self.variable
 
@@ -51,7 +51,7 @@ t_ = torch.linspace(0, 1, 2)
 
 
 def cost(X):
-    u = torchcontroldiffeq.cdeint(X, func, z0, t_, atol=1e-5, rtol=1e-5)
+    u = torchcde.cdeint(X, func, z0, t_, atol=1e-5, rtol=1e-5)
     nfe_forward = func.nfe
     func.reset_nfe()
     u[-1].sum().backward()
@@ -66,8 +66,8 @@ print('NFE = Number of function evaluations')
 ######################
 # Natural cubic splines
 ######################
-coeffs = torchcontroldiffeq.natural_cubic_spline_coeffs(t, x)
-cubic_interp = torchcontroldiffeq.NaturalCubicSpline(t, coeffs)
+coeffs = torchcde.natural_cubic_spline_coeffs(t, x)
+cubic_interp = torchcde.NaturalCubicSpline(t, coeffs)
 cubic_nfe_forward, cubic_nfe_backward = cost(cubic_interp)
 print('Natural Cubic Splines NFE: Forward: {} Backward: {}'.format(cubic_nfe_forward, cubic_nfe_backward))
 
@@ -75,25 +75,26 @@ print('Natural Cubic Splines NFE: Forward: {} Backward: {}'.format(cubic_nfe_for
 ######################
 # Linear interpolation
 ######################
-coeffs = torchcontroldiffeq.linear_interpolation_coeffs(t, x)
-linear_interp = torchcontroldiffeq.LinearInterpolation(t, coeffs, reparameterise=False)
+coeffs = torchcde.linear_interpolation_coeffs(t, x)
+linear_interp = torchcde.LinearInterpolation(t, coeffs, reparameterise=False)
 linear_nfe_forward, linear_nfe_backward = cost(linear_interp)
 print('Linear interpolation w/o reparam NFE: Forward: {} Backward: {}'.format(linear_nfe_forward, linear_nfe_backward))
 
 ######################
 # Reparameterised linear interpolation
 ######################
-coeffs = torchcontroldiffeq.linear_interpolation_coeffs(t, x)
-linear_reparam_interp = torchcontroldiffeq.LinearInterpolation(t, coeffs, reparameterise=True)
+coeffs = torchcde.linear_interpolation_coeffs(t, x)
+linear_reparam_interp = torchcde.LinearInterpolation(t, coeffs, reparameterise=True)
 linear_reparam_nfe_forward, linear_reparam_nfe_backward = cost(linear_reparam_interp)
 print('Linear interpolation w/ reparam NFE: Forward: {} Backward: {}'.format(linear_reparam_nfe_forward,
                                                                               linear_reparam_nfe_backward))
 
-linear_ratio = (linear_nfe_forward + linear_nfe_backward) / (cubic_nfe_forward + cubic_nfe_backward)
-linear_reparam_ratio = (linear_reparam_nfe_forward + linear_reparam_nfe_backward) / (cubic_nfe_forward +
-                                                                                     cubic_nfe_backward)
 
-print()
-print('Linear interpolation is {:.3f}% slower than natural cubic splines.'.format((linear_ratio - 1) * 100))
-print('Reparameterised linear interpolation is {:.3f}% slower than natural cubic splines.'
-      .format((linear_reparam_ratio - 1) * 100))
+######################
+# Multiple-region inear interpolation
+######################
+coeffs = torchcde.linear_interpolation_coeffs(t, x)
+linear_interp = torchcde.LinearInterpolation(t, coeffs, reparameterise=False).multiple_region()
+linear_nfe_forward, linear_nfe_backward = cost(linear_interp)
+print('Multiple-region linear interpolation w/o reparam NFE: Forward: {} Backward: {}'.format(linear_nfe_forward,
+                                                                                              linear_nfe_backward))

@@ -10,10 +10,10 @@ def register_computed_parameter(module, name, tensor):
     # function). This is needed to make sure that gradients aren't double-counted if we calculate one computed parameter
     # from another.
     try:
-        computed_parameters = module._torchcontroldiffeq_computed_parameters
+        computed_parameters = module._torchcde_computed_parameters
     except AttributeError:
         computed_parameters = {}
-        module._torchcontroldiffeq_computed_parameters = computed_parameters
+        module._torchcde_computed_parameters = computed_parameters
     for tens_name, tens_value in list(computed_parameters.items()):
         tens_value_view = tens_value.view(*tens_value.shape)
         module.register_buffer(tens_name, tens_value_view)

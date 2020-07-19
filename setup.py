@@ -6,7 +6,7 @@ import setuptools
 here = os.path.realpath(os.path.dirname(__file__))
 
 
-name = 'torchcontroldiffeq'
+name = 'torchcde'
 
 # for simplicity we actually store the version in the __version__ attribute in the source
 with io.open(os.path.join(here, name, '__init__.py')) as f:
@@ -26,7 +26,7 @@ description = "Differentiable controlled differential equation solvers for PyTor
 with io.open(os.path.join(here, 'README.md'), 'r', encoding='utf-8') as f:
     readme = f.read()
 
-url = "https://github.com/patrick-kidger/torchcontroldiffeq"
+url = "https://github.com/patrick-kidger/torchcde"
 
 license = "Apache-2.0"
 
@@ -52,7 +52,7 @@ classifiers = ["Development Status :: 4 - Beta",
 
 python_requires = ">=3.5, <4"
 
-install_requires = ['torch>=1.0.0', 'torchdiffeq>=0.0.1']
+install_requires = ['torch>=1.0.0', 'torchdiffeq>=0.0.2']
 
 setuptools.setup(name=name,
                  version=version,

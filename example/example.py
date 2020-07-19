@@ -4,7 +4,7 @@
 ######################
 import math
 import torch
-import torchcontroldiffeq
+import torchcde
 
 
 ######################
@@ -34,6 +34,7 @@ class CDEFunc(torch.nn.Module):
     # different times, which would be unusual. But it's there if you need it!
     ######################
     def forward(self, t, z):
+        # z has shape (batch, hidden_channels)
         z = self.linear1(z)
         z = z.relu()
         z = self.linear2(z)
@@ -42,10 +43,10 @@ class CDEFunc(torch.nn.Module):
         ######################
         z = z.tanh()
         ######################
-        # Ignoring the batch dimensions, the shape of the output tensor must be a matrix,
+        # Ignoring the batch dimension, the shape of the output tensor must be a matrix,
         # because we need it to represent a linear map from R^input_channels to R^hidden_channels.
         ######################
-        z = z.view(*z.shape[:-1], self.hidden_channels, self.input_channels)
+        z = z.view(z.size(0), self.hidden_channels, self.input_channels)
         return z
 
 
@@ -62,20 +63,20 @@ class NeuralCDE(torch.nn.Module):
         self.readout = torch.nn.Linear(hidden_channels, output_channels)
 
     def forward(self, t, coeffs):
-        spline = torchcontroldiffeq.NaturalCubicSpline(t, coeffs)
+        interp = torchcde.LinearInterpolation(t, coeffs)
 
         ######################
         # Easy to forget gotcha: Initial hidden state should be a function of the first observation.
         ######################
-        z0 = self.initial(spline.evaluate(t[0]))
+        z0 = self.initial(interp.evaluate(t[0]))
 
         ######################
         # Actually solve the CDE.
         ######################
-        z_T = torchcontroldiffeq.cdeint(X=spline,
-                                        z0=z0,
-                                        func=self.func,
-                                        t=t[[0, -1]])
+        z_T = torchcde.cdeint(X=interp.multiple_region(),
+                              z0=z0,
+                              func=self.func,
+                              t=t[[0, -1]])
         ######################
         # Both the initial value and the terminal value are returned from cdeint; extract just the terminal value,
         # and then apply a linear map.
@@ -118,7 +119,7 @@ def get_data():
     return t, X, y
 
 
-def main():
+def main(num_epochs=30):
     train_t, train_X, train_y = get_data()
 
     ######################
@@ -130,16 +131,16 @@ def main():
     optimizer = torch.optim.Adam(model.parameters())
 
     ######################
-    # Now we turn our dataset into a continuous path. We do this here via natural cubic spline interpolation.
+    # Now we turn our dataset into a continuous path. We do this here via linear interpolation.
     # The resulting `train_coeffs` are some tensors describing the path.
     # For most problems, it's advisable to save these coeffs and treat them as the dataset, as this interpolation can
     # take a long time.
     ######################
-    train_coeffs = torchcontroldiffeq.natural_cubic_spline_coeffs(train_t, train_X)
+    train_coeffs = torchcde.linear_interpolation_coeffs(train_t, train_X)
 
     train_dataset = torch.utils.data.TensorDataset(*train_coeffs, train_y)
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=32)
-    for epoch in range(30):
+    for epoch in range(num_epochs):
         for batch in train_dataloader:
             *batch_coeffs, batch_y = batch
             pred_y = model(train_t, batch_coeffs).squeeze(-1)
@@ -150,7 +151,7 @@ def main():
         print('Epoch: {}   Training loss: {}'.format(epoch, loss.item()))
 
     test_t, test_X, test_y = get_data()
-    test_coeffs = torchcontroldiffeq.natural_cubic_spline_coeffs(test_t, test_X)
+    test_coeffs = torchcde.linear_interpolation_coeffs(test_t, test_X)
     pred_y = model(test_t, test_coeffs).squeeze(-1)
     binary_prediction = (torch.sigmoid(pred_y) > 0.5).to(test_y.dtype)
     prediction_matches = (binary_prediction == test_y).to(test_y.dtype)

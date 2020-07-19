@@ -1,5 +1,5 @@
 import torch
-import torchcontroldiffeq
+import torchcde
 
 
 def test_shape():
@@ -16,8 +16,8 @@ def test_shape():
             times = torch.rand(num_points).sort().values
             values = torch.rand(*batch_dims, num_points, num_channels)
 
-            coeffs = torchcontroldiffeq.natural_cubic_spline_coeffs(times, values)
-            spline = torchcontroldiffeq.NaturalCubicSpline(times, coeffs)
+            coeffs = torchcde.natural_cubic_spline_coeffs(times, values)
+            spline = torchcde.NaturalCubicSpline(times, coeffs)
 
             class _Func(torch.nn.Module):
                 def __init__(self):
@@ -36,5 +36,5 @@ def test_shape():
             options = {}
             if method == 'rk4':
                 options['step_size'] = 1. / num_points
-            out = torchcontroldiffeq.cdeint(spline, f, z0, out_times, method=method, options=options)
+            out = torchcde.cdeint(spline, f, z0, out_times, method=method, options=options)
             assert out.shape == (*batch_dims, num_out_times, num_hidden_channels)

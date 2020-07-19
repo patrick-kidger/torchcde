@@ -99,9 +99,9 @@ def linear_interpolation_coeffs(t, x):
         don't reinstantiate it on every forward pass, if at all possible.
 
     Returns:
-        A tensor, which should in turn be passed to `torchcontroldiffeq.LinearInterpolation`.
+        A tensor, which should in turn be passed to `torchcde.LinearInterpolation`.
 
-        See the docstring for `torchcontroldiffeq.natural_cubic_spline_coeffs` for more information on why we do it this
+        See the docstring for `torchcde.natural_cubic_spline_coeffs` for more information on why we do it this
         way.
     """
     misc.validate_input_path(t, x)
@@ -132,7 +132,7 @@ class LinearInterpolation(torch.nn.Module):
         misc.register_computed_parameter(self, '_derivs', derivs)
         self._reparameterise = reparameterise
 
-    def to_stack(self):
+    def multiple_region(self):
         func = []
         for t, coeffs in zip(self._t.unfold(0, 2, 1), self._coeffs.unfold(-2, 2, 1).transpose(-1, -2).unbind(dim=-3)):
             func.append([t[0], t[1], type(self)(t, coeffs, reparameterise=self._reparameterise)])
