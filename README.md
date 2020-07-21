@@ -1,10 +1,17 @@
-# torchcde
+<h1 align='center'>torchcde</h1>
+<h2 align='center'>Differentiable GPU-capable solvers for CDEs</h2>
 
 This library provides differentiable GPU-capable solvers for controlled differential equations (CDEs). Backpropagation through the solver or via the adjoint method is supported; the latter allows for improved memory efficiency.
 
-In particular this allows for building [Neural Controlled Differential Equation](https://github.com/patrick-kidger/NeuralCDE) models, which extend Neural ODE models to (irregular) time series.
+In particular this allows for building [Neural Controlled Differential Equation](https://github.com/patrick-kidger/NeuralCDE) models, which are state-of-the-art models for (irregular) time series; they can be thought of as a "continuous time RNN".
 
 _Powered by the [`torchdiffeq`](https://github.com/rtqichen/torchdiffeq) library._
+
+---
+
+<p align="center">
+<img align="middle" src="./imgs/main.png" width="300" />
+</p>
 
 ## Installation
 
