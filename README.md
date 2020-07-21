@@ -10,7 +10,7 @@ _Powered by the [`torchdiffeq`](https://github.com/rtqichen/torchdiffeq) library
 ---
 
 <p align="center">
-<img align="middle" src="./imgs/main.png" width="300" />
+<img align="middle" src="./imgs/main.png" width="666" />
 </p>
 
 ## Installation
