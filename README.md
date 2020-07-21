@@ -1,11 +1,10 @@
 # torchcde
-This library provides differentiable GPU-capable solvers for integrating controlled differential equations (CDEs), implemented in PyTorch.
 
-Backpropagation through the solver or via the adjoint method is supported; the latter allows for improved memory efficiency.
+This library provides differentiable GPU-capable solvers for controlled differential equations (CDEs). Backpropagation through the solver or via the adjoint method is supported; the latter allows for improved memory efficiency.
 
-In particular, this allows for building [Neural Controlled Differential Equation](https://github.com/patrick-kidger/NeuralCDE) models, which extend Neural ODE models to (irregular) time series.
+In particular this allows for building [Neural Controlled Differential Equation](https://github.com/patrick-kidger/NeuralCDE) models, which extend Neural ODE models to (irregular) time series.
 
-_Powered by the excellent [`torchdiffeq`](https://github.com/rtqichen/torchdiffeq) library._
+_Powered by the [`torchdiffeq`](https://github.com/rtqichen/torchdiffeq) library._
 
 ## Installation
 
@@ -147,6 +146,8 @@ func = ((0., 0.2, piece_func1),
 torchcde.cdeint(func=func, t=t, ...)
 ```
 where we tell the solver to use `piece_func1` on the time interval `0, 0.2`, to use `piece_func2` on the time interval `0.2, 0.9`, and `piece_func3` on the time interval `0.9, 1`.
+
+We refer to each of these time intervals as a region of integration.
 
 #### Stacking CDEs
 You may wish to use the output of one CDE to control another. That is, to solve the coupled CDEs:
