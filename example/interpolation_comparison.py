@@ -1,28 +1,3 @@
-######################
-# Different interpolation schemes have different strengths and weaknesses.
-# The two main ones we consider here are natural cubic splines and linear interpolation.
-# A good interpolation scheme should satisify three conditions:
-# - Be causal.
-# - Depend in a sensible way on the data. (For example, quadratic splines can be unbounded on bounded data, so they're
-#   not a good choice!)
-# - Be smooth. This makes solving them with adaptive step size solvers much easier.
-#
-# Both linear interpolation and natural cubic splines depend on the data sensibly. (Both are bounded by some multiple of
-# the norm of the data.)
-# In terms of smoothness: 'naive' linear interpolation is very non-smooth; it has lots of jagged peaks. This is very
-# expensive to solve. However it is possible to _reparameterise_ the path: produce a path which has the same image
-# that is traced in the same order, but does so at a different speed. We can use this to slow down near each peak, to
-# make them easier to resolve.
-# Natural cubic splines are very smooth, and are easy to resolve.
-# Linear interpolation is causal, and natural cubic splines are noncausal.
-# Generally, we see that naive linear interpolation is about 750% [not a typo] more expensive than natural cubic
-# splines, whilst reparameterised linear interpolation is about 45% more expensive than natural cubic splines. So if
-# causality is not required then natural cubic splines are recommended. If causality is required, then reparameterised
-# linear interpolation is preferred.
-#
-# Here we demonstrate the costs that have just been stated above.
-######################
-
 import torch
 import torchcde
 
@@ -87,7 +62,7 @@ coeffs = torchcde.linear_interpolation_coeffs(t, x)
 linear_reparam_interp = torchcde.LinearInterpolation(t, coeffs, reparameterise=True)
 linear_reparam_nfe_forward, linear_reparam_nfe_backward = cost(linear_reparam_interp)
 print('Linear interpolation w/ reparam NFE: Forward: {} Backward: {}'.format(linear_reparam_nfe_forward,
-                                                                              linear_reparam_nfe_backward))
+                                                                             linear_reparam_nfe_backward))
 
 
 ######################

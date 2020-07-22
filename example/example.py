@@ -56,7 +56,6 @@ class CDEFunc(torch.nn.Module):
 class NeuralCDE(torch.nn.Module):
     def __init__(self, input_channels, hidden_channels, output_channels):
         super(NeuralCDE, self).__init__()
-        self.hidden_channels = hidden_channels
 
         self.func = CDEFunc(input_channels, hidden_channels)
         self.initial = torch.nn.Linear(input_channels, hidden_channels)

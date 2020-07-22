@@ -171,7 +171,7 @@ def natural_cubic_spline_coeffs(t, x):
         don't reinstantiate it on every forward pass, if at all possible.
 
     Returns:
-        A tuple of four tensors, which should in turn be passed to `torchcde.NaturalCubicSpline`.
+        A tensor, which should in turn be passed to `torchcde.NaturalCubicSpline`.
 
         Why do we do it like this? Because typically you want to use PyTorch tensors at various interfaces, for example
         when loading a batch from a DataLoader. If we wrapped all of this up into just the
@@ -202,7 +202,8 @@ def natural_cubic_spline_coeffs(t, x):
     b = b.transpose(-1, -2)
     two_c = two_c.transpose(-1, -2)
     three_d = three_d.transpose(-1, -2)
-    return a, b, two_c, three_d
+    coeffs = torch.cat([a, b, two_c, three_d], dim=-1)  # for simplicity put them all together
+    return coeffs
 
 
 class NaturalCubicSpline(torch.nn.Module):
@@ -228,7 +229,11 @@ class NaturalCubicSpline(torch.nn.Module):
         """
         super(NaturalCubicSpline, self).__init__(**kwargs)
 
-        a, b, two_c, three_d = coeffs
+        channels = coeffs.size(-1) // 4
+        if channels * 4 != coeffs.size(-1):  # check that it's a multiple of 4
+            raise ValueError("Passed invalid coeffs.")
+        a, b, two_c, three_d = (coeffs[..., :channels], coeffs[..., channels:2 * channels],
+                                coeffs[..., 2 * channels:3 * channels], coeffs[..., 3 * channels:])
 
         misc.register_computed_parameter(self, '_t', t)
         misc.register_computed_parameter(self, '_a', a)
