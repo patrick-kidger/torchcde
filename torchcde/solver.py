@@ -2,29 +2,9 @@ import torch
 import torchdiffeq
 
 
-def _normalise_and_check_individual(name, o, t):
-    if isinstance(o, torch.nn.Module):
-        o = [[t[0], t[-1], o]]
-    elif isinstance(o, (tuple, list)):
-        for _, _, o_ in o:
-            if not isinstance(o_, torch.nn.Module):
-                raise ValueError("Each {} must be a torch.nn.Module".format(name))
-    else:
-        raise ValueError("{} must be a torch.nn.Module or tuple or list".format(name))
-
-    if o[0][0] != t[0]:
-        raise ValueError("The first region of integration must start at t[0].")
-    if o[-1][1] != t[-1]:
-        raise ValueError("The final region of integration must finish at t[-1].")
-    prev_t1 = t[0]
-    for t0, t1, _ in o:
-        if t0 != prev_t1:
-            raise ValueError("The regions of integration must be contiguous.")
-        prev_t1 = t1
-    return o
-
-
 def _check_compatability(X, func, z0, t):
+    if not isinstance(X, torch.nn.Module):
+        raise ValueError("X must be a torch.nn.Module.")
     if not hasattr(X, 'derivative'):
         raise ValueError("X must have a 'derivative' method.")
     control_gradient = X.derivative(t[0].detach())
@@ -34,6 +14,8 @@ def _check_compatability(X, func, z0, t):
                          "(meaning {} batch dimensions)."
                          "".format(tuple(control_gradient.shape), tuple(control_gradient.shape[:-1]), tuple(z0.shape),
                                    tuple(z0.shape[:-1])))
+    if not isinstance(func, torch.nn.Module):
+        raise ValueError("func must be a torch.nn.Module.")
     system = func(t[0], z0)
     if len(system.shape) < 2:
         raise ValueError("func did not return a tensor with enough dimensions. Expected 2 dimensions, got {} dimensions"
@@ -55,33 +37,6 @@ def _check_compatability(X, func, z0, t):
                          "{} (meaning {} channels)."
                          "".format(tuple(system.shape), system.size(-1), tuple(control_gradient.shape),
                                    control_gradient.size(-1)))
-
-
-def _normalise_and_check_input(X, func, z0, t):
-    X = _normalise_and_check_individual('X', X, t)
-    func = _normalise_and_check_individual('func', func, t)
-    if len(X) == 1:
-        if len(func) != 1:
-            # Broadcast X to func
-            X = [[t0, t1, X[0][2]] for t0, t1, _ in func]
-    else:
-        if len(func) == 1:
-            # Broadcast func to X
-            func = [[t0, t1, func[0][2]] for t0, t1, _ in X]
-        else:
-            if len(X) == len(func):
-                for (t0, t1, _), (t0_, t1_, _) in zip(X, func):
-                    if t0 != t0_:
-                        raise ValueError("X and func must specify the same regions of integration.")
-                    if t1 != t1_:
-                        raise ValueError("X and func must specify the same regions of integration.")
-            else:
-                raise ValueError("X and func must specify the same regions of integration.")
-
-    for (_, _, X_), (_, _, func_) in zip(X, func):
-        _check_compatability(X_, func_, z0, t)
-
-    return X, func
 
 
 class _VectorField(torch.nn.Module):
@@ -183,18 +138,15 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
         zero gradient.) Switch to either natural cubic splines or reparameterise=True.
     """
 
-    # Change the default values for the tolerances because CDEs are difficult to solve with the default high tolerances.
+    # Reduce the default values for the tolerances because CDEs are difficult to solve with the default high tolerances.
     if 'atol' not in kwargs:
         kwargs['atol'] = 1e-5
     if 'rtol' not in kwargs:
         kwargs['rtol'] = 1e-3
 
-    X, func = _normalise_and_check_input(X, func, z0, t)
+    _check_compatability(X, func, z0, t)
 
-    vector_field = []
-    for (t0, t1, X_), (_, _, func_) in zip(X, func):
-        vector_field.append([t0, t1, _VectorField(X=X_, func=func_, t_requires_grad=t.requires_grad, adjoint=adjoint)])
-
+    vector_field = _VectorField(X=X, func=func, t_requires_grad=t.requires_grad, adjoint=adjoint)
     odeint = torchdiffeq.odeint_adjoint if adjoint else torchdiffeq.odeint
     out = odeint(func=vector_field, y0=z0, t=t, **kwargs)
 

@@ -62,20 +62,22 @@ class NeuralCDE(torch.nn.Module):
         self.readout = torch.nn.Linear(hidden_channels, output_channels)
 
     def forward(self, t, coeffs):
-        interp = torchcde.LinearInterpolation(t, coeffs)
+        X = torchcde.LinearInterpolation(t, coeffs)
 
         ######################
         # Easy to forget gotcha: Initial hidden state should be a function of the first observation.
         ######################
-        z0 = self.initial(interp.evaluate(t[0]))
+        z0 = self.initial(X.evaluate(t[0]))
 
         ######################
         # Actually solve the CDE.
         ######################
-        z_T = torchcde.cdeint(X=interp.multiple_region(),
+        z_T = torchcde.cdeint(X=X,
                               z0=z0,
                               func=self.func,
-                              t=t[[0, -1]])
+                              t=t[[0, -1]],
+                              method='dopri5',
+                              options=dict(grid_points=X.grid_points, eps=1e-5))
         ######################
         # Both the initial value and the terminal value are returned from cdeint; extract just the terminal value,
         # and then apply a linear map.

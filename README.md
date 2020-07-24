@@ -53,36 +53,36 @@ where the right hand side describes a matrix-vector product between `f(t, z)` an
 
 This is solved by
 ```python
-cdeint(X, func, z0, t, adjoint=True, **kwargs)
+cdeint(X, func, z0, t, adjoint, **kwargs)
 ```
 where letting `...` denote an arbitrary number of batch dimensions:
 * `X` is a `torch.nn.Module` with method `derivative`, such that `X.derivative(t)` is a Tensor of shape `(..., input_channels)`,
 * `func` is a `torch.nn.Module`, such that `func(t, z)` returns a Tensor of shape `(..., hidden_channels, input_channels)`,
 * `z0` a Tensor of shape `(..., hidden_channels)`,
-* `t` is a one-dimensional Tensor of times.
+* `t` is a one-dimensional Tensor of times to output `z` at.
+* `adjoint` is a boolean (defaulting to `True`).
 
 Adjoint backpropagation (which is slower but more memory efficient) can be toggled with `adjoint=True/False` and any additional `**kwargs` are passed on to `torchdiffeq.odeint[_adjoint]`, for example to specify the solver.
 
 ### Constructing controls
 
- A very common scenario is to construct the continuous control`X` from discrete data (which may be irregularly sampled with missing values). To support this, we provide several interpolation schemes:
+ A very common scenario is to construct the continuous control`X` from discrete data (which may be irregularly sampled with missing values). To support this, we provide three interpolation schemes:
 * Linear interpolation
 * Reparameterised linear interpolation
-* Multiple-region linear interpolation
 * Natural cubic splines
-
-Natural cubic splines were used in the original [Neural CDE paper](https://arxiv.org/abs/2005.08926). We now recommend multiple-region linear interpolation as the usual best choice.
 
 _Note that if for some reason you already have a continuous control `X` then you won't need an interpolation scheme at all!_
 
-To use multiple-region linear interpolation:
+Natural cubic splines were used in the original [Neural CDE paper](https://arxiv.org/abs/2005.08926). We now recommend linear interpolation, whilst telling the solver about the grid points, as usually a slightly better choice.
+
+To do this:
 ```python
 coeff = linear_interpolation_coeffs(t, x)
 
 # coeff is a torch.Tensor you can save, load,
 # pass through Datasets and DataLoaders etc.
 
-interp = LinearInterpolation(t, coeff)
+X = LinearInterpolation(t, coeff)
 ```
 where:
 * `t` is a one-dimensional Tensor of shape `(length,)`, giving observation times,
@@ -90,71 +90,82 @@ where:
 
 Usually the first line should be done as a preprocessing step, whilst the second line should be inside the forward pass of your model. See [example.py](./example/example.py) for a worked example.
 
-Then call `cdeint(X=interp, ...)` for just linear interpolation, or (typically much faster), `cdeint(X=interp.multiple_region(), ...)` to use multiple-region linear interpolation.
+Then call:
+```python
+cdeint(X=X, ...
+       method='dopri5',
+       options=dict(grid_points=X.grid_points, eps=1e-5))
+```
+Linear interpolation produces sharp changes at each interpolation point. Setting `grid_points` and `eps` like this tells the solver where the are, so that it can adapt to them.
 
-_See the [further documentation](##-further-documentation) at the bottom for a discussion of the other interpolation schemes._
-
-## Extending the library
-If you're interested in extending `torchcde` then have a look at [EXTENDING.md](./EXTENDING.md) for extra help on how to do this.
+_See the [further documentation](#further-documentation) at the bottom for more discussion on what's being done here, and for discussion on the other interpolation schemes._
 
 ## Differences to `controldiffeq`
 If you've used the previous [`controldiffeq`](https://github.com/patrick-kidger/NeuralCDE/tree/master/controldiffeq) library then a couple things have been changed. See [DIFFERENCES.md](./DIFFERENCES.md).
 
+## Extending the library
+If you're interested in extending `torchcde` then have a look at [EXTENDING.md](./EXTENDING.md) for extra help on how to do this.
+
 ## Further documentation
-`torchcde` also provides a few pieces of more advanced functionality. Here we discuss:
+Here we discuss:
+* The importance of the `grid_points` and `eps` options for adaptive solvers.
+* The use of fixed solvers.
 * Other interpolation methods, and the differences between them.
-* Using piecewise `func`.
+
+And some more advanced functionality:
 * Stacking CDEs (i.e. controlling one by the output of another).
 * Computing logsignatures for the log-ODE method.
 
+#### `grid_points` and `eps` with adaptive solvers
+If using linear interpolation, then integrating the CDE naively can be difficult: we get a jump in the derivative at each interpolation point, and this slows adaptive step size solvers down. First they have to slow down to resolve the point - and then they have to figure out that they can speed back up again afterwards.
+
+We can help them out by telling them about the prescence of these jumps, so that they don't have to discover it for themselves.
+
+We do this by passing the `grid_points` option with either the `dopri5` or `dopri8` solvers, which specify the points at which these jumps exist, so that the solver can place its integration points directly on the jump. The `torchde.LinearInterpolation` class provides a helper `.grid_points` property that can be passed to set the the grid points correctly, as in the examples.
+
+There's one more important thing to include: the `eps` argument. Recall that we're solving the differential equation
+```
+dz/dt(t) = f(t, z)dX/dt(t)     z(t_0) = z0
+```
+where `X` is piecewise linear. Thus `dX/dt` is piecewise constant; it has jumps. Thus we don't want to place our integration points exactly on the jump, as `X` isn't consistently defined there. We need to place integration points just to the left, and just to the right, of that jump. `eps` specifices how much to shift to the left or right, so it has just has to be some very small number above zero.
+
+#### Fixed solvers
+Solving CDEs (regardless of the choice of interpolation scheme in a Neural CDE) with fixed solvers like `euler`, `midpoint`, `rk4` etc. is pretty much exactly the same as solving an ODE with a fixed solver. Just make sure to set the `step_size` option to something sensible; for example the smallest gap between times:
+```python
+X = LinearInterpolation(t, coeffs)
+cdeint(
+    X=X, t=t[[0, -1]], func=..., method='rk4',
+    options=dict(step_size=(t[1:] - t[:-1]).min())
+)
+``` 
+
 #### Different interpolation methods
-* Linear interpolation: these are causal, but are not smooth, which makes them hard to integrate.
+* Linear interpolation: these are causal, but are not smooth, which makes them hard to integrate - unless we tell the solver about the difficult points, in which case they become very easy to integrate!
 ```python
 coeff = linear_interpolation_coeffs(t, x)
-interp = LinearInterpolation(t, coeff)
+X = LinearInterpolation(t, coeff)
+cdeint(X=X, ...,
+       method='dopri5',
+       options=dict(grid_points=X.grid_points, eps=1e-5))
 ```
 
 * Reparameterised linear interpolation: these are causal, and quite smooth, making them reasonably easy to integrate.
 ```python
 coeff = linear_interpolation_coeffs(t, x)
-interp = LinearInterpolation(t, coeff, reparameterise=True)
-```
-
-* Multiple-region linear interpolation: this is just linear interpolation, but we help out of the numerical solver by telling it where the sharp corners are.
-```python
-coeff = linear_interpolation_coeffs(t, x)
-interp = LinearInterpolation(t, coeff).multiple_region()
-# interp is now a list, so call multiple_region() just before
-# passing it to cdeint; not before.
+X = LinearInterpolation(t, coeff, reparameterise=True)
+cdeint(X=X, ...)  # no options necessary
 ```
 
 * Natural cubic splines: these were a simple choice used in the original Neural CDE paper. They are non-causal, but are quite smooth, which makes them easy to integrate.
 ```python
 coeffs = natural_cubic_splines_coeffs(t, x)
-interp = NaturalCubicSpline(t, coeffs)
+X = NaturalCubicSpline(t, coeffs)
+cdeint(X=X, ...)  # no options necessary
 ```
 
 See [interpolation_comparison.py](./example/interpolation_comparison.py) for a comparison of the speed of each of these with adapative step size solvers.
 
-_To the best of our knowledge there is essentially no reason to use anything other than multiple-region linear interpolation. It is causal, it is faster than any other method due to its ease of integration (whether using fixed or adaptive solvers), and the accuracy of Neural CDE models don't seem to be affected._
-
-#### Using piecewise `func`
-It may be that `func` has some piecewise structure, where it has different behaviour at different times `t`. This can be handled just by adding an `if` statement inside its `forward` pass, but then the numerical solver has to discover these discontinuities for itself, which may slow things down.
-
-Instead, you can explicitly tell the solver about the piecewise structure like this:
-```python
-piece_func1 = ...  # some torch.nn.Module
-piece_func2 = ...  # some torch.nn.Module
-piece_func3 = ...  # some torch.nn.Module
-t = torch.tensor([0., 1.])
-func = ((0., 0.2, piece_func1),
-        (0.2, 0.9, piece_func2),
-        (0.9, 1.), piece_func3))
-torchcde.cdeint(func=func, t=t, ...)
-```
-where we tell the solver to use `piece_func1` on the time interval `0, 0.2`, to use `piece_func2` on the time interval `0.2, 0.9`, and `piece_func3` on the time interval `0.9, 1`.
-
-We refer to each of these time intervals as a region of integration.
+_To the best of our knowledge there is nearly no reason to use anything other than grid-aware linear interpolation. It is causal, it is faster than any other method due to its ease of integration (whether using fixed or adaptive solvers), and the accuracy of Neural CDE models don't seem to be affected. In the very low accuracy regime (`atol,rtol=1e-2` or so) then cubic splines may be ever-so-slightly faster, but that's it._
 
 #### Stacking CDEs
 You may wish to use the output of one CDE to control another. That is, to solve the coupled CDEs:
@@ -175,7 +186,7 @@ and using `cdeint` as normal. This is probably simpler, but forces you to use th
 
 The second way is to have `cdeint` output `z(t)` at multiple times `t`, interpolate the discrete output into a continuous path, and then call `cdeint` again. This is probably less memory efficient, but allows for different choices of solver for each call to `cdeint`.
 
-_For example, this could be used to create multi-layer Neural CDEs, just like multi-layer RNNs. Although at the time of writing, no-one has tried this yet!_
+_For example, this could be used to create multi-layer Neural CDEs, just like multi-layer RNNs. Although as of writing this, no-one seems to have tried this yet!_
 
 #### The log-ODE method
 This is a way of reducing the length of data by using extra channels. (For example, this may help train Neural CDE models faster, as the extra channels can be parallelised, but extra length cannot.)

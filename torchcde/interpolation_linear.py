@@ -132,11 +132,9 @@ class LinearInterpolation(torch.nn.Module):
         misc.register_computed_parameter(self, '_derivs', derivs)
         self._reparameterise = reparameterise
 
-    def multiple_region(self):
-        func = []
-        for t, coeffs in zip(self._t.unfold(0, 2, 1), self._coeffs.unfold(-2, 2, 1).transpose(-1, -2).unbind(dim=-3)):
-            func.append([t[0], t[1], type(self)(t, coeffs, reparameterise=self._reparameterise)])
-        return func
+    @property
+    def grid_points(self):
+        return self._t
 
     def _interpret_t(self, t):
         t = torch.as_tensor(t, dtype=self._derivs.dtype, device=self._derivs.device)

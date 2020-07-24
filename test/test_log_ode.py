@@ -25,10 +25,10 @@ def test_with_linear_interpolation():
             window_length = (end - start) / pieces
             logsig_t, logsig_x = torchcde.logsignature_windows(t, x, depth, window_length)
             coeffs = torchcde.linear_interpolation_coeffs(logsig_t, logsig_x)
-            interp = torchcde.LinearInterpolation(logsig_t, coeffs)
+            X = torchcde.LinearInterpolation(logsig_t, coeffs)
 
             point = 1
             for logsignature in logsignatures:
-                interp_logsignature = interp.derivative(t[point])
+                interp_logsignature = X.derivative(t[point])
                 assert interp_logsignature.allclose(logsignature)
                 point += 4
