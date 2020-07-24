@@ -38,7 +38,7 @@ def run(name, X, **kwargs):
     nfe_backward = func.nfe
     func.reset()
     timespan = time.time() - start
-    print('{} NFE: Forward: {} Backward: {} Timespan: {}'.format(name, nfe_forward, nfe_backward, timespan))
+    print('{}: NFE Forward: {}, NFE Backward: {}, Timespan: {}'.format(name, nfe_forward, nfe_backward, timespan))
 
 
 print('NFE = Number of function evaluations')
@@ -65,4 +65,4 @@ run('Grid-aware linear interpolation eps=1e-5', linear_grid_X, grid_points=t, ep
 print("\nDon't forget the `eps` argument. If using linear interpolation then you should always set this to a small "
       "number above zero, like 1e-5. (And making it bigger or smaller won't really change anything.)")
 linear_grid_zero_eps_X = torchcde.LinearInterpolation(t, linear_coeffs)
-run('Grid-aware linear interpolation eps=0', linear_grid_zero_eps_X, grid_points=t, eps=1e-5)
+run('Grid-aware linear interpolation eps=0', linear_grid_zero_eps_X, grid_points=t)
