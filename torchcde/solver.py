@@ -35,17 +35,20 @@ def _check_compatability(X, func, z0, t):
                          "".format(tuple(control_gradient.shape), tuple(control_gradient.shape[:-1]), tuple(z0.shape),
                                    tuple(z0.shape[:-1])))
     system = func(t[0], z0)
+    if len(system.shape) < 2:
+        raise ValueError("func did not return a tensor with enough dimensions. Expected 2 dimensions, got {} dimensions"
+                         " with shape {}. Recall that func must return a (batch of) matrices, describing a linear map."
+                         .format(len(system.shape), tuple(system.shape)))
     if system.shape[:-2] != z0.shape[:-1]:
         raise ValueError("func did not return a tensor with the same number of batch dimensions as z0. func returned "
                          "shape {} (meaning {} batch dimensions)), whilst z0 has shape {} (meaning {} batch"
                          " dimensions)."
                          "".format(tuple(system.shape), tuple(system.shape[:-2]), tuple(z0.shape),
                                    tuple(z0.shape[:-1])))
-    if system.size(-2) != z0.shape[-1]:
+    if system.size(-2) != z0.size(-1):
         raise ValueError("func did not return a tensor with the same number of hidden channels as z0. func returned "
                          "shape {} (meaning {} channels), whilst z0 has shape {} (meaning {} channels)."
-                         "".format(tuple(system.shape), system.size(-2), tuple(z0.shape),
-                                   z0.shape.size(-1)))
+                         "".format(tuple(system.shape), system.size(-2), tuple(z0.shape), z0.size(-1)))
     if system.size(-1) != control_gradient.size(-1):
         raise ValueError("func did not return a tensor with the same number of input channels as X.derivative "
                          "returned. func returned shape {} (meaning {} channels), whilst X.derivative returned shape "
@@ -182,7 +185,7 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
 
     # Change the default values for the tolerances because CDEs are difficult to solve with the default high tolerances.
     if 'atol' not in kwargs:
-        kwargs['atol'] = 1e-3
+        kwargs['atol'] = 1e-5
     if 'rtol' not in kwargs:
         kwargs['rtol'] = 1e-3
 
