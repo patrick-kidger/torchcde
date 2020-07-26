@@ -114,16 +114,17 @@ def linear_interpolation_coeffs(t, x):
 class LinearInterpolation(torch.nn.Module):
     """Calculates the linear interpolation to the batch of controls given. Also calculates its derivative."""
 
-    def __init__(self, t, coeffs, reparameterise=False, **kwargs):
+    def __init__(self, t, coeffs, reparameterise='none', **kwargs):
         """
         Arguments:
             t: As passed to linear_interpolation_coeffs.
             coeffs: As returned by linear_interpolation_coeffs.
-            reparameterise: If set to True, then the speed of the interpolation will increase between knots and
-                slow down near them. This helps adaptive step solvers resolve the path more easily. Note that if using
-                a fixed step solver, then this isn't helpful, and is probably best left on False.
+            reparameterise: Either 'none' or 'bump'. Defaults to 'none'. Reparameterising each linear piece can help
+                adaptive step size solvers, in particular those that aren't aware of where the kinks in the path are.
         """
         super(LinearInterpolation, self).__init__(**kwargs)
+
+        assert reparameterise in ('none', 'bump')
 
         derivs = (coeffs[..., 1:, :] - coeffs[..., :-1, :]) / (t[1:] - t[:-1]).unsqueeze(-1)
 
@@ -154,7 +155,7 @@ class LinearInterpolation(torch.nn.Module):
         prev_t = self._t[index]
         next_t = self._t[index + 1]
         diff_t = next_t - prev_t
-        if self._reparameterise:
+        if self._reparameterise == 'bump':
             fractional_part = fractional_part - diff_t * _inv_two_pi * torch.sin(_two_pi * fractional_part / diff_t)
         return prev_coeff + fractional_part * (next_coeff - prev_coeff) / diff_t.unsqueeze(-1)
 
@@ -162,13 +163,15 @@ class LinearInterpolation(torch.nn.Module):
         fractional_part, index = self._interpret_t(t)
         deriv = self._derivs[..., index, :]
 
-        if self._reparameterise:
+        if self._reparameterise != 'none':
             prev_t = self._t[index]
             next_t = self._t[index + 1]
             diff_t = next_t - prev_t
-
             fractional_part = fractional_part / diff_t
-            mult = 1 - torch.cos(_two_pi * fractional_part)
+            if self._reparameterise == 'bump':
+                mult = 1 - torch.cos(_two_pi * fractional_part)
+            else:
+                raise RuntimeError
 
             deriv = deriv * mult
         return deriv

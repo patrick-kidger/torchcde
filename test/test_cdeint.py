@@ -36,5 +36,5 @@ def test_shape():
             options = {}
             if method == 'rk4':
                 options['step_size'] = 1. / num_points
-            out = torchcde.cdeint(spline, f, z0, out_times, method=method, options=options)
+            out = torchcde.cdeint(spline, f, z0, out_times, method=method, options=options, rtol=1e-4, atol=1e-6)
             assert out.shape == (*batch_dims, num_out_times, num_hidden_channels)

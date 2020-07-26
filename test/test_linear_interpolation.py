@@ -10,7 +10,7 @@ def test_random():
         for _ in range(10):
             yield torch.randint(low=2, high=100, size=(1,)).item()
 
-    for reparameterise in (False, True):
+    for reparameterise in ('none', 'bump'):
         for drop in (False, True):
             for num_points in _points():
                 start = torch.rand(1).item() * 10 - 5
@@ -51,7 +51,7 @@ def test_small():
     x = torch.rand(2, 1, dtype=torch.float64)
     true_deriv = (x[1] - x[0]) / (end - start)
     coeffs = torchcde.linear_interpolation_coeffs(t, x)
-    linear = torchcde.LinearInterpolation(t, coeffs, reparameterise=False)
+    linear = torchcde.LinearInterpolation(t, coeffs)
     for time in torch.linspace(-1, 2, 100):
         true = x[0] + true_deriv * (time - t[0])
         pred = linear.evaluate(time)
@@ -63,7 +63,7 @@ def test_small():
 
 
 def test_specification_and_derivative():
-    for reparameterise in (False, True):
+    for reparameterise in ('none', 'bump'):
         for _ in range(10):
             for num_batch_dims in (0, 1, 2, 3):
                 batch_dims = []

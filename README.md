@@ -152,7 +152,7 @@ cdeint(X=X, ...,
 * Reparameterised linear interpolation: these are causal, and quite smooth, making them reasonably easy to integrate.
 ```python
 coeff = linear_interpolation_coeffs(t, x)
-X = LinearInterpolation(t, coeff, reparameterise=True)
+X = LinearInterpolation(t, coeff, reparameterise='bump')
 cdeint(X=X, ...)  # no options necessary
 ```
 

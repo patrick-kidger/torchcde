@@ -139,11 +139,11 @@ def main(num_epochs=30):
     ######################
     train_coeffs = torchcde.linear_interpolation_coeffs(train_t, train_X)
 
-    train_dataset = torch.utils.data.TensorDataset(*train_coeffs, train_y)
+    train_dataset = torch.utils.data.TensorDataset(train_coeffs, train_y)
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=32)
     for epoch in range(num_epochs):
         for batch in train_dataloader:
-            *batch_coeffs, batch_y = batch
+            batch_coeffs, batch_y = batch
             pred_y = model(train_t, batch_coeffs).squeeze(-1)
             loss = torch.nn.functional.binary_cross_entropy_with_logits(pred_y, batch_y)
             loss.backward()

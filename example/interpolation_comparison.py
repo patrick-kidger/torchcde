@@ -53,7 +53,7 @@ run('Natural Cubic Splines', cubic_X)
 linear_X = torchcde.LinearInterpolation(t, linear_coeffs)
 run('Linear interpolation w/o reparam', linear_X)
 
-linear_reparam_X = torchcde.LinearInterpolation(t, linear_coeffs, reparameterise=True)
+linear_reparam_X = torchcde.LinearInterpolation(t, linear_coeffs, reparameterise='bump')
 run('Linear interpolation w/ reparam', linear_reparam_X)
 
 run('Grid-aware linear interpolation w/ eps=1e-5', linear_X, grid_points=t, eps=1e-5)
