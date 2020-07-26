@@ -115,8 +115,9 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
         t: a one dimensional tensor describing the times to range of times to integrate over and output the results at.
             The initial time will be t[0] and the final time will be t[-1].
         adjoint: A boolean; whether to use the adjoint method to backpropagate. Defaults to True.
-        **kwargs: Any additional kwargs to pass to the odeint solver of torchdiffeq. Note that empirically, the solvers
-            that seem to work best are dopri5, euler, midpoint, rk4. Avoid all three Adams methods.
+        **kwargs: Any additional kwargs to pass to the odeint solver of torchdiffeq (the most common are `rtol`, `atol`,
+            `method`, `options`). Note that empirically, the solvers that seem to work best are "dopri5", "euler",
+            "midpoint", "rk4". Avoid all three Adams methods.
 
     Returns:
         The value of each z_{t_i} of the solution to the CDE z_t = z_{t_0} + \int_0^t f(s, z_s)dX_s, where t_i = t[i].
@@ -127,12 +128,12 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
 
     Warnings:
         Note that the returned tensor puts the sequence dimension second-to-last, rather than first like in
-        `torchdiffeq.cdeint`.
+        `torchdiffeq.odeint`.
 
         If you need gradients with respect to t (which is quite unusual, but still), then don't use the particular
         combination of:
          - adjoint=True (the default)
-         - linear interpolation, with reparameterise=False, to construct X.
+         - linear interpolation with reparameterise=False (the default) to construct X.
         It doesn't work. (For mathematical reasons: the adjoint method requires access to d2X_dt2, which is
         measure-valued for linear interpolation; this doesn't get detected during the solve so you wrongly end up with
         zero gradient.) Switch to either natural cubic splines or reparameterise=True.

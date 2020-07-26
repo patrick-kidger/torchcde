@@ -41,28 +41,26 @@ def run(name, X, **kwargs):
     print('{}: NFE Forward: {}, NFE Backward: {}, Timespan: {}'.format(name, nfe_forward, nfe_backward, timespan))
 
 
+print()
 print('NFE = Number of function evaluations')
 
 cubic_coeffs = torchcde.natural_cubic_spline_coeffs(t, x)
 linear_coeffs = torchcde.linear_interpolation_coeffs(t, x)
 
-print("\nCubic splines do pretty well!")
 cubic_X = torchcde.NaturalCubicSpline(t, cubic_coeffs)
 run('Natural Cubic Splines', cubic_X)
 
-print("\nNaive linear interpolation takes a very long time.")
 linear_X = torchcde.LinearInterpolation(t, linear_coeffs)
 run('Linear interpolation w/o reparam', linear_X)
 
-print("\nReparameterising it helps...")
 linear_reparam_X = torchcde.LinearInterpolation(t, linear_coeffs, reparameterise=True)
 run('Linear interpolation w/ reparam', linear_reparam_X)
 
-print("\n...but an even better choice is to tell the solver about the jumps!")
-linear_grid_X = torchcde.LinearInterpolation(t, linear_coeffs)
-run('Grid-aware linear interpolation eps=1e-5', linear_grid_X, grid_points=t, eps=1e-5)
+run('Grid-aware linear interpolation w/ eps=1e-5', linear_X, grid_points=t, eps=1e-5)
 
-print("\nDon't forget the `eps` argument. If using linear interpolation then you should always set this to a small "
+run('Grid-aware linear interpolation w/ eps=0', linear_X, grid_points=t)
+
+print()
+print("Don't forget the `eps` argument. If using linear interpolation then you should always set this to a small "
       "number above zero, like 1e-5. (And making it bigger or smaller won't really change anything.)")
-linear_grid_zero_eps_X = torchcde.LinearInterpolation(t, linear_coeffs)
-run('Grid-aware linear interpolation eps=0', linear_grid_zero_eps_X, grid_points=t)
+print()
