@@ -147,6 +147,17 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
 
     _check_compatability(X, func, z0, t)
 
+    if adjoint:
+        try:
+            adjoint_params = tuple(kwargs['adjoint_params'])
+        except KeyError:
+            adjoint_params = tuple(func.parameters())
+        try:
+            computed_params = tuple(func._torchcde_computed_parameters.values())
+        except AttributeError:
+            computed_params = ()
+        kwargs['adjoint_params'] = adjoint_params + computed_params
+
     vector_field = _VectorField(X=X, func=func, t_requires_grad=t.requires_grad, adjoint=adjoint)
     odeint = torchdiffeq.odeint_adjoint if adjoint else torchdiffeq.odeint
     out = odeint(func=vector_field, y0=z0, t=t, **kwargs)

@@ -19,6 +19,8 @@ _Powered by the [`torchdiffeq`](https://github.com/rtqichen/torchdiffeq) library
 pip install git+https://github.com/patrick-kidger/torchcde.git
 ```
 
+Requires PyTorch >=1.6.
+
 ## Example
 We encourage looking at [example.py](./example/example.py), which demonstrates how to use the library to train a Neural CDE model to predict the chirality of a spiral.
 

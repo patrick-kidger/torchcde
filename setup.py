@@ -50,7 +50,7 @@ classifiers = ["Development Status :: 4 - Beta",
                "Topic :: Scientific/Engineering :: Information Analysis",
                "Topic :: Scientific/Engineering :: Mathematics"]
 
-python_requires = ">=3.5, <4"
+python_requires = "~=3.6"
 
 install_requires = ['torch>=1.0.0', 'torchdiffeq>=0.0.2']
 

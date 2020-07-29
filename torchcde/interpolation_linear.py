@@ -140,9 +140,8 @@ class LinearInterpolation(torch.nn.Module):
     def _interpret_t(self, t):
         t = torch.as_tensor(t, dtype=self._derivs.dtype, device=self._derivs.device)
         maxlen = self._derivs.size(-2) - 1
-        # TODO: switch to a log search not a linear search
-        index = (t.unsqueeze(-1) > self._t).sum(dim=-1) - 1
-        index = index.clamp(0, maxlen)  # clamp because t may go outside of [t[0], t[-1]]; this is fine
+        # clamp because t may go outside of [t[0], t[-1]]; this is fine
+        index = torch.bucketize(t.detach(), self._t).sub(1).clamp(0, maxlen)
         # will never access the last element of self._t; this is correct behaviour
         fractional_part = t - self._t[index]
         return fractional_part, index
