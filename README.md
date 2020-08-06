@@ -121,15 +121,15 @@ And some more advanced functionality:
 #### `grid_points` and `eps` with adaptive solvers
 If using linear interpolation, then integrating the CDE naively can be difficult: we get a jump in the derivative at each interpolation point, and this slows adaptive step size solvers down. First they have to slow down to resolve the point - and then they have to figure out that they can speed back up again afterwards.
 
-We can help them out by telling them about the prescence of these jumps, so that they don't have to discover it for themselves.
+We can help them out by telling them about the presence of these jumps, so that they don't have to discover it for themselves.
 
-We do this by passing the `grid_points` option with either the `dopri5` or `dopri8` solvers, which specify the points at which these jumps exist, so that the solver can place its integration points directly on the jump. The `torchde.LinearInterpolation` class provides a helper `.grid_points` property that can be passed to set the the grid points correctly, as in the examples.
+We do this by passing the `grid_points` option, which specify the points at which these jumps exist, so that the solver can place its integration points directly on the jump. The `torchde.LinearInterpolation` class provides a helper `.grid_points` property that can be passed to set the the grid points correctly, as in the examples.
 
 There's one more important thing to include: the `eps` argument. Recall that we're solving the differential equation
 ```
 dz/dt(t) = f(t, z)dX/dt(t)     z(t_0) = z0
 ```
-where `X` is piecewise linear. Thus `dX/dt` is piecewise constant; it has jumps. Thus we don't want to place our integration points exactly on the jump, as `X` isn't consistently defined there. We need to place integration points just to the left, and just to the right, of that jump. `eps` specifices how much to shift to the left or right, so it has just has to be some very small number above zero.
+where `X` is piecewise linear. Thus `dX/dt` is piecewise constant. We don't want to place our integration points exactly on the jumps, as `dX/dt` isn't consistently defined there. We need to place integration points just to the left, and just to the right, of the jumps. `eps` specifices how much to shift to the left or right, so it has just has to be some very small number above zero.
 
 #### Fixed solvers
 Solving CDEs (regardless of the choice of interpolation scheme in a Neural CDE) with fixed solvers like `euler`, `midpoint`, `rk4` etc. is pretty much exactly the same as solving an ODE with a fixed solver. Just make sure to set the `step_size` option to something sensible; for example the smallest gap between times:
@@ -142,7 +142,7 @@ cdeint(
 ``` 
 
 #### Different interpolation methods
-* Linear interpolation: these are causal, but are not smooth, which makes them hard to integrate - unless we tell the solver about the difficult points, in which case they become very easy to integrate!
+* Linear interpolation: these are causal, but are not smooth, which makes them hard to integrate - unless we tell the solver about the difficult points, in which case they become quite easy to integrate!
 ```python
 coeff = linear_interpolation_coeffs(t, x)
 X = LinearInterpolation(t, coeff)
@@ -165,9 +165,13 @@ X = NaturalCubicSpline(t, coeffs)
 cdeint(X=X, ...)  # no options necessary
 ```
 
-See [interpolation_comparison.py](./example/interpolation_comparison.py) for a comparison of the speed of each of these with adapative step size solvers.
+If causality is a concern (e.g. data is arriving continuously), then linear interpolation (either version) is the only choice.
 
-_To the best of our knowledge there is nearly no reason to use anything other than grid-aware linear interpolation. It is causal, it is faster than any other method due to its ease of integration (whether using fixed or adaptive solvers), and the accuracy of Neural CDE models don't seem to be affected. In the very low accuracy regime (`atol,rtol=1e-2` or so) then cubic splines may be ever-so-slightly faster, but that's it._
+If causality isn't a concern, then natural cubic splines tend to be a bit quicker with lower tolerances (`rtol`, `atol`), and grid-aware linear interpolation tends to be a bit quicker at higher tolerances.
+
+Reparameterised linear interpolation is useful for one (quite unusual) special case: if you need derivatives with respect to `t`. These won't be calculated correctly with grid-aware linear interpolation*, so use reparameterised linear interpolation (or natural cubic splines) instead.
+
+_*For mathematical reasons - that involves calculating `d2X/dt2`, which is measure-valued._
 
 #### Stacking CDEs
 You may wish to use the output of one CDE to control another. That is, to solve the coupled CDEs:
@@ -195,7 +199,7 @@ This is a way of reducing the length of data by using extra channels. (For examp
 
 This is done by splitting the control `X` up into windows, and computing the _logsignature_ of the control over each window. The logsignature is a transform known to extract the information that is most important to describing how `X` controls a CDE.
 
-This is supported by the `logsignature_windows` function, which takes in data, and produces a transformed path in logsignature space:
+This is supported by the `logsignature_windows` function, which takes in data, and produces a transformed path, that now exists in logsignature space:
 ```python
 batch, length, channels = 1, 100, 2
 t = torch.linspace(0, 1, length)
