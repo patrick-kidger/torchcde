@@ -62,6 +62,9 @@ class NeuralCDE(torch.nn.Module):
         self.readout = torch.nn.Linear(hidden_channels, output_channels)
 
     def forward(self, t, coeffs):
+        ######################
+        # Can also use some other interpolation here; the original paper used cubic.
+        ######################
         X = torchcde.LinearInterpolation(t, coeffs)
 
         ######################
@@ -71,6 +74,9 @@ class NeuralCDE(torch.nn.Module):
 
         ######################
         # Actually solve the CDE.
+        # If using linear interpolation, make sure to tell the solver about the discontinuities in the linear
+        # interpolation via the `grid_points` option. (Linear interpolation has a `.grid_points` attribute precisely to
+        # make this eas.)
         ######################
         z_T = torchcde.cdeint(X=X,
                               z0=z0,
@@ -78,6 +84,7 @@ class NeuralCDE(torch.nn.Module):
                               t=t[[0, -1]],
                               method='dopri5',
                               options=dict(grid_points=X.grid_points, eps=1e-5))
+
         ######################
         # Both the initial value and the terminal value are returned from cdeint; extract just the terminal value,
         # and then apply a linear map.
@@ -133,9 +140,8 @@ def main(num_epochs=30):
 
     ######################
     # Now we turn our dataset into a continuous path. We do this here via linear interpolation.
-    # The resulting `train_coeffs` are some tensors describing the path.
-    # For most problems, it's advisable to save these coeffs and treat them as the dataset, as this interpolation can
-    # take a long time.
+    # The resulting `train_coeffs` is a tensor describing the path.
+    # For most problems, it's probably easiest to save this tensor and treat it as the dataset.
     ######################
     train_coeffs = torchcde.linear_interpolation_coeffs(train_t, train_X)
 

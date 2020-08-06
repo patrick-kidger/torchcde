@@ -141,9 +141,9 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
 
     # Reduce the default values for the tolerances because CDEs are difficult to solve with the default high tolerances.
     if 'atol' not in kwargs:
-        kwargs['atol'] = 1e-5
+        kwargs['atol'] = 1e-6
     if 'rtol' not in kwargs:
-        kwargs['rtol'] = 1e-3
+        kwargs['rtol'] = 1e-4
 
     _check_compatability(X, func, z0, t)
 
