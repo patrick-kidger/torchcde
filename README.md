@@ -24,6 +24,30 @@ Requires PyTorch >=1.6.
 ## Example
 We encourage looking at [example.py](./example/example.py), which demonstrates how to use the library to train a Neural CDE model to predict the chirality of a spiral.
 
+For a very simple example:
+```python
+import torch
+import torchcde
+
+batch, length, input_channels = 1, 10, 1
+hidden_channels = 3
+
+x = torch.rand(batch, length, input_channels)
+coeffs = torchcde.natural_cubic_spline_coeffs(x)
+X = torchcde.NaturalCubicSpline(coeffs)
+z0 = torch.rand(batch, hidden_channels)
+
+class F(torch.nn.Module):
+    def __init__(self):
+        super(F, self).__init__()
+        self.linear = torch.nn.Linear(hidden_channels, hidden_channels * input_channels)
+    def forward(self, t, z):
+        return self.linear(z).view(batch, hidden_channels, input_channels)
+func = F()
+
+torchcde.cdeint(X=X, func=func, z0=z0, t=X.interval)
+```
+
 ## Citation
 If you found use this library useful, we would appreciate a citation:
 
@@ -79,26 +103,27 @@ Natural cubic splines were used in the original [Neural CDE paper](https://arxiv
 
 To do this:
 ```python
-coeff = linear_interpolation_coeffs(t, x)
+coeffs = linear_interpolation_coeffs(x)
 
-# coeff is a torch.Tensor you can save, load,
+# coeffs is a torch.Tensor you can save, load,
 # pass through Datasets and DataLoaders etc.
 
-X = LinearInterpolation(t, coeff)
+X = LinearInterpolation(coeffs)
 ```
 where:
-* `t` is a one-dimensional Tensor of shape `(length,)`, giving observation times,
 * `x` is a Tensor of shape `(..., length, input_channels)`, where `...` is some number of batch dimensions. Missing data should be represented as a `NaN`.
 
 Usually the first line should be done as a preprocessing step, whilst the second line should be inside the forward pass of your model. See [example.py](./example/example.py) for a worked example.
 
 Then call:
 ```python
-cdeint(X=X, ...
+cdeint(X=X, func=... z0=..., t=X.interval,
        method='dopri5',
        options=dict(grid_points=X.grid_points, eps=1e-5))
 ```
 Linear interpolation produces sharp changes at each interpolation point. Setting `grid_points` and `eps` like this tells the solver where the are, so that it can adapt to them.
+
+Recall that the `t` argument specifies the initial and final times to integrate between, and all the times to output `z` at. The property `X.interval` gives the start and end regions of the interval that `X` is created over, so it is available as convenience for passing as `t`.
 
 _See the [further documentation](#further-documentation) at the bottom for more discussion on what's being done here, and for discussion on the other interpolation schemes._
 
@@ -144,8 +169,8 @@ cdeint(
 #### Different interpolation methods
 * Linear interpolation: these are causal, but are not smooth, which makes them hard to integrate - unless we tell the solver about the difficult points, in which case they become quite easy to integrate!
 ```python
-coeff = linear_interpolation_coeffs(t, x)
-X = LinearInterpolation(t, coeff)
+coeffs = linear_interpolation_coeffs(x)
+X = LinearInterpolation(coeffs)
 cdeint(X=X, ...,
        method='dopri5',
        options=dict(grid_points=X.grid_points, eps=1e-5))
@@ -153,15 +178,15 @@ cdeint(X=X, ...,
 
 * Reparameterised linear interpolation: these are causal, and quite smooth, making them reasonably easy to integrate.
 ```python
-coeff = linear_interpolation_coeffs(t, x)
-X = LinearInterpolation(t, coeff, reparameterise='bump')
+coeffs = linear_interpolation_coeffs(x)
+X = LinearInterpolation(coeffs, reparameterise='bump')
 cdeint(X=X, ...)  # no options necessary
 ```
 
 * Natural cubic splines: these were a simple choice used in the original Neural CDE paper. They are non-causal, but are quite smooth, which makes them easy to integrate.
 ```python
-coeffs = natural_cubic_splines_coeffs(t, x)
-X = NaturalCubicSpline(t, coeffs)
+coeffs = natural_cubic_splines_coeffs(x)
+X = NaturalCubicSpline(coeffs)
 cdeint(X=X, ...)  # no options necessary
 ```
 

@@ -13,11 +13,11 @@ def test_shape():
             for _ in range(num_batch_dims):
                 batch_dims.append(torch.randint(low=1, high=3, size=(1,)).item())
 
-            times = torch.rand(num_points).sort().values
+            t = torch.rand(num_points).sort().values
             values = torch.rand(*batch_dims, num_points, num_channels)
 
-            coeffs = torchcde.natural_cubic_spline_coeffs(times, values)
-            spline = torchcde.NaturalCubicSpline(times, coeffs)
+            coeffs = torchcde.natural_cubic_spline_coeffs(values, t)
+            spline = torchcde.NaturalCubicSpline(coeffs, t)
 
             class _Func(torch.nn.Module):
                 def __init__(self):
@@ -31,7 +31,7 @@ def test_shape():
             z0 = torch.rand(*batch_dims, num_hidden_channels)
 
             num_out_times = torch.randint(low=2, high=10, size=(1,)).item()
-            out_times = torch.rand(num_out_times, dtype=torch.float64).sort().values * (times[-1] - times[0]) + times[0]
+            out_times = torch.rand(num_out_times, dtype=torch.float64).sort().values * (t[-1] - t[0]) + t[0]
 
             options = {}
             if method == 'rk4':

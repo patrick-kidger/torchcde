@@ -61,16 +61,16 @@ class NeuralCDE(torch.nn.Module):
         self.initial = torch.nn.Linear(input_channels, hidden_channels)
         self.readout = torch.nn.Linear(hidden_channels, output_channels)
 
-    def forward(self, t, coeffs):
+    def forward(self, coeffs):
         ######################
         # Can also use some other interpolation here; the original paper used cubic.
         ######################
-        X = torchcde.LinearInterpolation(t, coeffs)
+        X = torchcde.LinearInterpolation(coeffs)
 
         ######################
         # Easy to forget gotcha: Initial hidden state should be a function of the first observation.
         ######################
-        z0 = self.initial(X.evaluate(t[0]))
+        z0 = self.initial(X.evaluate(0.))
 
         ######################
         # Actually solve the CDE.
@@ -81,7 +81,7 @@ class NeuralCDE(torch.nn.Module):
         z_T = torchcde.cdeint(X=X,
                               z0=z0,
                               func=self.func,
-                              t=t[[0, -1]],
+                              t=X.interval,
                               method='dopri5',
                               options=dict(grid_points=X.grid_points, eps=1e-5))
 
@@ -120,15 +120,14 @@ def get_data():
     y = y[perm]
 
     ######################
-    # t is a tensor of times of shape (sequence=100,)
     # X is a tensor of observations, of shape (batch=128, sequence=100, channels=3)
     # y is a tensor of labels, of shape (batch=128,), either 0 or 1 corresponding to anticlockwise or clockwise respectively.
     ######################
-    return t, X, y
+    return X, y
 
 
 def main(num_epochs=30):
-    train_t, train_X, train_y = get_data()
+    train_X, train_y = get_data()
 
     ######################
     # input_channels=3 because we have both the horizontal and vertical position of a point in the spiral, and time.
@@ -143,23 +142,23 @@ def main(num_epochs=30):
     # The resulting `train_coeffs` is a tensor describing the path.
     # For most problems, it's probably easiest to save this tensor and treat it as the dataset.
     ######################
-    train_coeffs = torchcde.linear_interpolation_coeffs(train_t, train_X)
+    train_coeffs = torchcde.linear_interpolation_coeffs(train_X)
 
     train_dataset = torch.utils.data.TensorDataset(train_coeffs, train_y)
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=32)
     for epoch in range(num_epochs):
         for batch in train_dataloader:
             batch_coeffs, batch_y = batch
-            pred_y = model(train_t, batch_coeffs).squeeze(-1)
+            pred_y = model(batch_coeffs).squeeze(-1)
             loss = torch.nn.functional.binary_cross_entropy_with_logits(pred_y, batch_y)
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
         print('Epoch: {}   Training loss: {}'.format(epoch, loss.item()))
 
-    test_t, test_X, test_y = get_data()
-    test_coeffs = torchcde.linear_interpolation_coeffs(test_t, test_X)
-    pred_y = model(test_t, test_coeffs).squeeze(-1)
+    test_X, test_y = get_data()
+    test_coeffs = torchcde.linear_interpolation_coeffs(test_X)
+    pred_y = model(test_coeffs).squeeze(-1)
     binary_prediction = (torch.sigmoid(pred_y) > 0.5).to(test_y.dtype)
     prediction_matches = (binary_prediction == test_y).to(test_y.dtype)
     proportion_correct = prediction_matches.sum() / test_y.size(0)

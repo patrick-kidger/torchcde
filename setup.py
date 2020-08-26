@@ -41,10 +41,6 @@ classifiers = ["Development Status :: 4 - Beta",
                "Operating System :: Microsoft :: Windows",
                "Operating System :: Unix",
                "Programming Language :: Python :: 3",
-               "Programming Language :: Python :: 3.5",
-               "Programming Language :: Python :: 3.6",
-               "Programming Language :: Python :: 3.7",
-               "Programming Language :: Python :: 3.8",
                "Programming Language :: Python :: Implementation :: CPython",
                "Topic :: Scientific/Engineering :: Artificial Intelligence",
                "Topic :: Scientific/Engineering :: Information Analysis",
@@ -52,7 +48,7 @@ classifiers = ["Development Status :: 4 - Beta",
 
 python_requires = "~=3.6"
 
-install_requires = ['torch>=1.0.0', 'torchdiffeq>=0.0.2']
+install_requires = ['torch>=1.0.0', 'torchdiffeq>=0.1.0']
 
 setuptools.setup(name=name,
                  version=version,

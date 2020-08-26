@@ -82,14 +82,15 @@ def _linear_interpolation_coeffs_with_missing_values(t, x):
         return misc.cheap_stack(out_pieces, dim=0)
 
 
-def linear_interpolation_coeffs(t, x):
+def linear_interpolation_coeffs(x, t=None):
     """Calculates the knots of the linear interpolation of the batch of controls given.
 
     Arguments:
-        t: One dimensional tensor of times. Must be monotonically increasing.
         x: tensor of values, of shape (..., length, input_channels), where ... is some number of batch dimensions. This
             is interpreted as a (batch of) paths taking values in an input_channels-dimensional real vector space, with
             length-many observations. Missing values are supported, and should be represented as NaNs.
+        t: Optional one dimensional tensor of times. Must be monotonically increasing. If not passed will default to
+            tensor([0., 1., ..., length - 1]).
 
     In particular, the support for missing values allows for batching together elements that are observed at
     different times; just set them to have missing values at each other's observation times.
@@ -104,7 +105,7 @@ def linear_interpolation_coeffs(t, x):
         See the docstring for `torchcde.natural_cubic_spline_coeffs` for more information on why we do it this
         way.
     """
-    misc.validate_input_path(t, x)
+    t = misc.validate_input_path(x, t)
 
     if torch.isnan(x).any():
         x = _linear_interpolation_coeffs_with_missing_values(t, x.transpose(-1, -2)).transpose(-1, -2)
@@ -114,17 +115,19 @@ def linear_interpolation_coeffs(t, x):
 class LinearInterpolation(torch.nn.Module):
     """Calculates the linear interpolation to the batch of controls given. Also calculates its derivative."""
 
-    def __init__(self, t, coeffs, reparameterise='none', **kwargs):
+    def __init__(self, coeffs, t=None, reparameterise='none', **kwargs):
         """
         Arguments:
-            t: As passed to linear_interpolation_coeffs.
             coeffs: As returned by linear_interpolation_coeffs.
+            t: As passed to linear_interpolation_coeffs. (If it was passed.)
             reparameterise: Either 'none' or 'bump'. Defaults to 'none'. Reparameterising each linear piece can help
                 adaptive step size solvers, in particular those that aren't aware of where the kinks in the path are.
         """
         super(LinearInterpolation, self).__init__(**kwargs)
-
         assert reparameterise in ('none', 'bump')
+
+        if t is None:
+            t = torch.linspace(0, coeffs.size(-2) - 1, coeffs.size(-2), dtype=coeffs.dtype, device=coeffs.device)
 
         derivs = (coeffs[..., 1:, :] - coeffs[..., :-1, :]) / (t[1:] - t[:-1]).unsqueeze(-1)
 
@@ -137,11 +140,15 @@ class LinearInterpolation(torch.nn.Module):
     def grid_points(self):
         return self._t
 
+    @property
+    def interval(self):
+        return torch.stack([self._t[0], self._t[-1]])
+
     def _interpret_t(self, t):
         t = torch.as_tensor(t, dtype=self._derivs.dtype, device=self._derivs.device)
         maxlen = self._derivs.size(-2) - 1
         # clamp because t may go outside of [t[0], t[-1]]; this is fine
-        index = torch.bucketize(t.detach(), self._t).sub(1).clamp(0, maxlen)
+        index = torch.bucketize(t.detach(), self._t.detach()).sub(1).clamp(0, maxlen)
         # will never access the last element of self._t; this is correct behaviour
         fractional_part = t - self._t[index]
         return fractional_part, index

@@ -40,14 +40,12 @@ def _check_compatability(X, func, z0, t):
 
 
 class _VectorField(torch.nn.Module):
-    def __init__(self, X, func, t_requires_grad, adjoint):
+    def __init__(self, X, func):
         """Defines a controlled vector field.
 
         Arguments:
             X: As cdeint.
             func: As cdeint.
-            t_requires_grad: Whether the 't' argument to cdeint requires gradient.
-            adjoint: Whether we are using the adjoint method.
         """
         super(_VectorField, self).__init__()
         if not isinstance(func, torch.nn.Module):
@@ -55,31 +53,8 @@ class _VectorField(torch.nn.Module):
 
         self.X = X
         self.func = func
-        self.t_not_requires_grad = adjoint and not t_requires_grad
 
     def __call__(self, t, z):
-        # So what's up with this then?
-        #
-        # First of all, this only applies if we're using the adjoint method, so this doesn't change anything in the
-        # non-adjoint case. In the adjoint case, however, the derivative wrt t is only used to compute the derivative
-        # wrt the input times.
-        #
-        # By default torchdiffeq computes all of these gradients regardless, and any ones that aren't needed just get
-        # discarded. So for one thing, detaching here gives us a speedup.
-        #
-        # More importantly, however: the fact that it's computing these gradients affects adaptive step size solvers, as
-        # the solver tries to resolve the gradients wrt these additional arguments. In the particular case of linear
-        # interpolation, this poses a problem, as the derivative wrt t doesn't exist. (Or rather, it's measure-valued,
-        # which is the same thing as far as things are concerned here.) This breaks the adjoint method.
-        #
-        # As it's generally quite rare to compute derivatives wrt the times, this is the fix: most of the time we just
-        # tell torchdiffeq that we don't have a gradient wrt that input, so it doesn't bother calculating it in the
-        # first place.
-        #
-        # (And if you do want gradients wrt times - don't use linear interpolation!)
-        if self.t_not_requires_grad:
-            t = t.detach()
-
         # control_gradient is of shape (..., input_channels)
         control_gradient = self.X.derivative(t)
         # vector_field is of shape (..., hidden_channels, input_channels)
@@ -153,12 +128,12 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
         except KeyError:
             adjoint_params = tuple(func.parameters())
         try:
-            computed_params = tuple(func._torchcde_computed_parameters.values())
+            computed_params = tuple(param for param in X._torchcde_computed_parameters.values() if param.requires_grad)
         except AttributeError:
             computed_params = ()
         kwargs['adjoint_params'] = adjoint_params + computed_params
 
-    vector_field = _VectorField(X=X, func=func, t_requires_grad=t.requires_grad, adjoint=adjoint)
+    vector_field = _VectorField(X=X, func=func)
     odeint = torchdiffeq.odeint_adjoint if adjoint else torchdiffeq.odeint
     out = odeint(func=vector_field, y0=z0, t=t, **kwargs)
 
