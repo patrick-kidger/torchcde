@@ -128,10 +128,11 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
         except KeyError:
             adjoint_params = tuple(func.parameters())
         try:
-            computed_params = tuple(param for param in X._torchcde_computed_parameters.values() if param.requires_grad)
+            computed_params = tuple(X._torchcde_computed_parameters.values())
         except AttributeError:
             computed_params = ()
-        kwargs['adjoint_params'] = adjoint_params + computed_params
+        adjoint_params = tuple(param for param in adjoint_params + computed_params if param.requires_grad)
+        kwargs['adjoint_params'] = adjoint_params
 
     vector_field = _VectorField(X=X, func=func)
     odeint = torchdiffeq.odeint_adjoint if adjoint else torchdiffeq.odeint
