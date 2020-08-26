@@ -17,8 +17,10 @@ We've made a few changes since [`controldiffeq`](https://github.com/patrick-kidg
 
 - The system `func` (the argument to `cdeint`) now also accepts time `t` as an argument when called. (Rather than just the state `z`.)
 
+- You don't need to pass time as an argument to `natural_cubic_spline_coeffs` or `NaturalCubicSpline` any more; an equally spaced parameterisation is picked for you (by default; this can be overridden). Note that if using `NaturalCubicSpline` as an input to a CDE then this change shouldn't really affect things, because of the "reparameterisation invariance" property of CDEs, i.e. that it's just the output values that matter, not the parameterisation.
+
 ## Other changes
 
-- The default `rtol` and `atol` for `cdeint` are now dramatically reduced down to `1e-3` and `1e-5` respectively. This speeds up the default settings a lot, and still seems to work just fine in terms of empirical performance.
+- The default `rtol` and `atol` for `cdeint` are now reduced down to `1e-4` and `1e-6` respectively. These seem like reasonable choices of CDEs as deafult settings, and still seems to work just fine in terms of empirical performance.
 
 - The sequence dimension of the tensor returned from `cdeint` is now the second-to-last one (rather than the first one) so that the result is now of shape `(...batch dimensions..., length, channels)`. This fixes an inconsistency between the location of the sequence dimension for inputs and outputs. (But as a result is now no longer the same as in `torchdiffeq`.)
