@@ -154,14 +154,15 @@ def _natural_cubic_spline_coeffs_with_missing_values_scalar(t, x):
 # The mathematics of this are adapted from  http://mathworld.wolfram.com/CubicSpline.html, although they only treat the
 # case of each piece being parameterised by [0, 1]. (We instead take the length of each piece to be the difference in
 # time stamps.)
-def natural_cubic_spline_coeffs(t, x):
+def natural_cubic_spline_coeffs(x, t=None):
     """Calculates the coefficients of the natural cubic spline approximation to the batch of controls given.
 
     Arguments:
-        t: One dimensional tensor of times. Must be monotonically increasing.
         x: tensor of values, of shape (..., length, input_channels), where ... is some number of batch dimensions. This
             is interpreted as a (batch of) paths taking values in an input_channels-dimensional real vector space, with
             length-many observations. Missing values are supported, and should be represented as NaNs.
+        t: Optional one dimensional tensor of times. Must be monotonically increasing. If not passed will default to
+            tensor([0., 1., ..., length - 1]).
 
     In particular, the support for missing values allows for batching together elements that are observed at
     different times; just set them to have missing values at each other's observation times.
@@ -171,11 +172,11 @@ def natural_cubic_spline_coeffs(t, x):
         don't reinstantiate it on every forward pass, if at all possible.
 
     Returns:
-        A tuple of four tensors, which should in turn be passed to `torchcontroldiffeq.NaturalCubicSpline`.
+        A tensor, which should in turn be passed to `torchcde.NaturalCubicSpline`.
 
         Why do we do it like this? Because typically you want to use PyTorch tensors at various interfaces, for example
         when loading a batch from a DataLoader. If we wrapped all of this up into just the
-        `torchcontroldiffeq.NaturalCubicSpline` class then that sort of thing wouldn't be possible.
+        `torchcde.NaturalCubicSpline` class then that sort of thing wouldn't be possible.
 
         As such the suggested use is to:
         (a) Load your data.
@@ -187,7 +188,7 @@ def natural_cubic_spline_coeffs(t, x):
 
         See also the accompanying example.py.
     """
-    misc.validate_input_path(t, x)
+    t = misc.validate_input_path(x, t)
 
     if torch.isnan(x).any():
         # Transpose because channels are a batch dimension for the purpose of finding interpolating polynomials.
@@ -202,33 +203,40 @@ def natural_cubic_spline_coeffs(t, x):
     b = b.transpose(-1, -2)
     two_c = two_c.transpose(-1, -2)
     three_d = three_d.transpose(-1, -2)
-    return a, b, two_c, three_d
+    coeffs = torch.cat([a, b, two_c, three_d], dim=-1)  # for simplicity put them all together
+    return coeffs
 
 
 class NaturalCubicSpline(torch.nn.Module):
     """Calculates the natural cubic spline approximation to the batch of controls given. Also calculates its derivative.
 
     Example:
-        t = torch.linspace(0, 1, 7)
         # (2, 1) are batch dimensions. 7 is the time dimension (of the same length as t). 3 is the channel dimension.
         x = torch.rand(2, 1, 7, 3)
-        coeffs = natural_cubic_spline_coeffs(t, x)
-        # ...at this point you can save t and coeffs, put them through PyTorch's Datasets and DataLoaders, etc...
-        spline = NaturalCubicSpline(t, coeffs)
+        coeffs = natural_cubic_spline_coeffs(x)
+        # ...at this point you can save coeffs, put it through PyTorch's Datasets and DataLoaders, etc...
+        spline = NaturalCubicSpline(coeffs)
         point = torch.tensor(0.4)
         # will be a tensor of shape (2, 1, 3), corresponding to batch and channel dimensions
         out = spline.derivative(point)
     """
 
-    def __init__(self, t, coeffs, **kwargs):
+    def __init__(self, coeffs, t=None, **kwargs):
         """
         Arguments:
-            t: As passed to linear_interpolation_coeffs.
-            coeffs: As returned by `torchcontroldiffeq.natural_cubic_spline_coeffs`.
+            coeffs: As returned by `torchcde.natural_cubic_spline_coeffs`.
+            t: As passed to linear_interpolation_coeffs. (If it was passed.)
         """
         super(NaturalCubicSpline, self).__init__(**kwargs)
 
-        a, b, two_c, three_d = coeffs
+        if t is None:
+            t = torch.linspace(0, coeffs.size(-2), coeffs.size(-2) + 1, dtype=coeffs.dtype, device=coeffs.device)
+
+        channels = coeffs.size(-1) // 4
+        if channels * 4 != coeffs.size(-1):  # check that it's a multiple of 4
+            raise ValueError("Passed invalid coeffs.")
+        a, b, two_c, three_d = (coeffs[..., :channels], coeffs[..., channels:2 * channels],
+                                coeffs[..., 2 * channels:3 * channels], coeffs[..., 3 * channels:])
 
         misc.register_computed_parameter(self, '_t', t)
         misc.register_computed_parameter(self, '_a', a)
@@ -237,12 +245,15 @@ class NaturalCubicSpline(torch.nn.Module):
         misc.register_computed_parameter(self, '_two_c', two_c)
         misc.register_computed_parameter(self, '_three_d', three_d)
 
+    @property
+    def interval(self):
+        return torch.stack([self._t[0], self._t[-1]])
+
     def _interpret_t(self, t):
         t = torch.as_tensor(t, dtype=self._b.dtype,  device=self._b.device)
         maxlen = self._b.size(-2) - 1
-        # TODO: switch to a log search not a linear search
-        index = (t.unsqueeze(-1) > self._t).sum(dim=-1) - 1
-        index = index.clamp(0, maxlen)  # clamp because t may go outside of [t[0], t[-1]]; this is fine
+        # clamp because t may go outside of [t[0], t[-1]]; this is fine
+        index = torch.bucketize(t.detach(), self._t.detach()).sub(1).clamp(0, maxlen)
         # will never access the last element of self._t; this is correct behaviour
         fractional_part = t - self._t[index]
         return fractional_part, index

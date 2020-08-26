@@ -12,16 +12,17 @@ from . import interpolation_linear
 from . import misc
 
 
-def logsignature_windows(t, x, depth, window_length):
+def logsignature_windows(x, depth, window_length, t=None):
     """Calculates logsignatures over multiple windows, for the batch of controls given, as in the log-ODE method.
 
     Arguments:
-        t: One dimensional tensor of times. Must be monotonically increasing.
         x: tensor of values, of shape (..., length, input_channels), where ... is some number of batch dimensions. This
             is interpreted as a (batch of) paths taking values in an input_channels-dimensional real vector space, with
             length-many observations. Missing values are supported, and should be represented as NaNs.
         depth: What depth to compute the logsignatures to.
         window_length: How long a time interval to compute logsignatures over.
+        t: Optional one dimensional tensor of times. Must be monotonically increasing. If not passed will default to
+            tensor([0., 1., ..., length - 1]).
 
     In particular, the support for missing values allows for batching together elements that are observed at
     different times; just set them to have missing values at each other's observation times.
@@ -31,9 +32,9 @@ def logsignature_windows(t, x, depth, window_length):
         don't reinstantiate it on every forward pass, if at all possible.
 
     Returns:
-        A tuple of two tensors, which are the times and values of the transformed path.
+        A tuple of two tensors, which are the values and times of the transformed path.
     """
-    misc.validate_input_path(t, x)
+    t = misc.validate_input_path(x, t)
 
     # slightly roundabout way of doing things (rather than using arange) so that it's constructed differentiably
     timespan = t[-1] - t[0]
@@ -66,7 +67,7 @@ def logsignature_windows(t, x, depth, window_length):
 
     # Fill in any missing data linearly (linearly because that's what signatures do in between observations anyway)
     # and conveniently that's what this already does. Here 'missing data' includes the NaNs we've just added.
-    x = interpolation_linear.linear_interpolation_coeffs(t, x)
+    x = interpolation_linear.linear_interpolation_coeffs(x, t)
 
     # Flatten batch dimensions for compatibility with Signatory
     flatten_X = x.view(-1, x.size(-2), x.size(-1))
@@ -83,4 +84,4 @@ def logsignature_windows(t, x, depth, window_length):
     logsignatures = torch.stack(logsignatures, dim=-2)
     logsignatures = logsignatures.cumsum(dim=-2)
 
-    return new_t, logsignatures
+    return logsignatures, new_t

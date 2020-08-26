@@ -1,12 +1,12 @@
 import torch
-import torchcontroldiffeq.misc  # testing an implementation detail
+import torchcde.misc  # testing an implementation detail
 
 
 def test_cheap_stack():
     for num in range(1, 4):
         for dim in (-2, -1, 0, 1):
             xs = [torch.rand(1, 1) for _ in range(num)]
-            s = torchcontroldiffeq.misc.cheap_stack(xs, dim)
+            s = torchcde.misc.cheap_stack(xs, dim)
             s2 = torch.stack(xs, dim)
             assert s.shape == s2.shape
             assert (s == s2).all()
@@ -23,6 +23,6 @@ def test_tridiagonal_solve():
         A[range(1, size), range(size - 1)] = lower
         A[range(size - 1), range(1, size)] = upper
         b = torch.randn(size, dtype=torch.float64)
-        x = torchcontroldiffeq.misc.tridiagonal_solve(b, upper, diagonal, lower)
+        x = torchcde.misc.tridiagonal_solve(b, upper, diagonal, lower)
         mul = A @ x
         assert mul.allclose(b)

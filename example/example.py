@@ -4,7 +4,7 @@
 ######################
 import math
 import torch
-import torchcontroldiffeq
+import torchcde
 
 
 ######################
@@ -34,15 +34,19 @@ class CDEFunc(torch.nn.Module):
     # different times, which would be unusual. But it's there if you need it!
     ######################
     def forward(self, t, z):
+        # z has shape (batch, hidden_channels)
         z = self.linear1(z)
-        z = torch.tanh(z)
+        z = z.relu()
         z = self.linear2(z)
         ######################
-        # The one thing you need to be careful about is the shape of the output tensor. Ignoring the batch dimensions,
-        # it must be a matrix, because we need it to represent a linear map from R^input_channels to
-        # R^hidden_channels.
+        # Easy-to-forget gotcha: Best results tend to be obtained by adding a final tanh nonlinearity.
         ######################
-        z = z.view(*z.shape[:-1], self.hidden_channels, self.input_channels)
+        z = z.tanh()
+        ######################
+        # Ignoring the batch dimension, the shape of the output tensor must be a matrix,
+        # because we need it to represent a linear map from R^input_channels to R^hidden_channels.
+        ######################
+        z = z.view(z.size(0), self.hidden_channels, self.input_channels)
         return z
 
 
@@ -52,36 +56,41 @@ class CDEFunc(torch.nn.Module):
 class NeuralCDE(torch.nn.Module):
     def __init__(self, input_channels, hidden_channels, output_channels):
         super(NeuralCDE, self).__init__()
-        self.hidden_channels = hidden_channels
 
-        self.initial = torch.nn.Linear(input_channels, hidden_channels)
         self.func = CDEFunc(input_channels, hidden_channels)
-        self.linear = torch.nn.Linear(hidden_channels, output_channels)
+        self.initial = torch.nn.Linear(input_channels, hidden_channels)
+        self.readout = torch.nn.Linear(hidden_channels, output_channels)
 
-    def forward(self, t, coeffs):
+    def forward(self, coeffs):
         ######################
-        # Create the initial point as a function (here just linear) of the initial value.
+        # Can also use some other interpolation here; the original paper used cubic.
         ######################
-        initial_t = t[0]
-        cubic_spline = torchcontroldiffeq.NaturalCubicSpline(t, coeffs)
-        z0 = self.initial(cubic_spline.evaluate(initial_t))
-
-        ######################
-        # Actually solve the CDE. z_T will be a tensor of shape (batch, sequence, channels). Here sequence=2, as that is
-        # the length of its 't' argument.
-        ######################
-        final_t = t[-1]
-        z_T = torchcontroldiffeq.cdeint(X=cubic_spline,
-                                        func=self.func,
-                                        z0=z0,
-                                        t=torch.stack([initial_t, final_t]))
+        X = torchcde.LinearInterpolation(coeffs)
 
         ######################
-        # Both the initial value and the final value are returned from cdeint (this is consistent with how
-        # torchdiffeq.odeint works). Extract just the final value, and then apply a linear map.
+        # Easy to forget gotcha: Initial hidden state should be a function of the first observation.
+        ######################
+        z0 = self.initial(X.evaluate(0.))
+
+        ######################
+        # Actually solve the CDE.
+        # If using linear interpolation, make sure to tell the solver about the discontinuities in the linear
+        # interpolation via the `grid_points` option. (Linear interpolation has a `.grid_points` attribute precisely to
+        # make this eas.)
+        ######################
+        z_T = torchcde.cdeint(X=X,
+                              z0=z0,
+                              func=self.func,
+                              t=X.interval,
+                              method='dopri5',
+                              options=dict(grid_points=X.grid_points, eps=1e-5))
+
+        ######################
+        # Both the initial value and the terminal value are returned from cdeint; extract just the terminal value,
+        # and then apply a linear map.
         ######################
         z_T = z_T[:, 1]
-        pred_y = self.linear(z_T)
+        pred_y = self.readout(z_T)
         return pred_y
 
 
@@ -90,16 +99,19 @@ class NeuralCDE(torch.nn.Module):
 # Here we have a simple example which generates some spirals, some going clockwise, some going anticlockwise.
 ######################
 def get_data():
-    linspace = torch.linspace(0., 4 * math.pi, 100)
-    start = torch.rand(128) * 2 * math.pi
-    times = start.unsqueeze(1) + linspace.unsqueeze(0)
+    t = torch.linspace(0., 4 * math.pi, 100)
 
-    x_pos = torch.cos(times) / (1 + 0.5 * times)
+    start = torch.rand(128) * 2 * math.pi
+    x_pos = torch.cos(start.unsqueeze(1) + t.unsqueeze(0)) / (1 + 0.5 * t)
     x_pos[:64] *= -1
-    y_pos = torch.sin(times) / (1 + 0.5 * times)
-    pos = torch.stack([x_pos, y_pos], dim=2)
-    additive_noise = 0.06 * torch.rand(128, 100, 2) - 0.03
-    X = pos + additive_noise
+    y_pos = torch.sin(start.unsqueeze(1) + t.unsqueeze(0)) / (1 + 0.5 * t)
+    x_pos += 0.01 * torch.randn_like(x_pos)
+    y_pos += 0.01 * torch.randn_like(y_pos)
+    ######################
+    # Easy to forget gotcha: time should be included as a channel; Neural CDEs need to be explicitly told the
+    # rate at which time passes. Here, we have a regularly sampled dataset, so appending time is pretty simple.
+    ######################
+    X = torch.stack([t.unsqueeze(0).repeat(128, 1), x_pos, y_pos], dim=2)
     y = torch.zeros(128)
     y[:64] = 1
 
@@ -107,56 +119,46 @@ def get_data():
     X = X[perm]
     y = y[perm]
 
-    t = torch.linspace(0, 99, 100)
-
     ######################
-    # t, X are treated as a time series. X has two channels, corresponding to the horizontal and vertical position of a
-    # point in the spiral.
-    # y are the labels, 0 or 1, corresponding to anticlockwise or clockwise respectively.
+    # X is a tensor of observations, of shape (batch=128, sequence=100, channels=3)
+    # y is a tensor of labels, of shape (batch=128,), either 0 or 1 corresponding to anticlockwise or clockwise respectively.
     ######################
-    return t, X, y
+    return X, y
 
 
-def main(num_epochs=100):
-    ######################
-    # train_t is a one dimensional tensor of times, that must be shared across an entire batch during training (and so
-    # for simplicity here we simply have the same times for the whole dataset). This means that train_t does not have a
-    # batch dimension, and is just used everywhere we need the times.
-    # Contrast both train_X and train_y, which have a batch dimension.
-    ######################
-    train_t, train_X, train_y = get_data()
+def main(num_epochs=30):
+    train_X, train_y = get_data()
 
     ######################
-    # input_channels=2 because we have both the horizontal and vertical position of a point in the spiral.
+    # input_channels=3 because we have both the horizontal and vertical position of a point in the spiral, and time.
     # hidden_channels=8 is the number of hidden channels for the evolving z_t, which we get to choose.
     # output_channels=1 because we're doing binary classification.
     ######################
-    model = NeuralCDE(input_channels=2, hidden_channels=8, output_channels=1)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    model = NeuralCDE(input_channels=3, hidden_channels=8, output_channels=1)
+    optimizer = torch.optim.Adam(model.parameters())
 
     ######################
-    # Now we turn our dataset into a continuous path. We do this here via natural cubic spline interpolation.
-    # The resulting `train_coeffs` are some tensors describing the path.
-    # For most problems, it's advisable to save these coeffs and treat them as a dataset, as this interpolation can take
-    # a long time.
+    # Now we turn our dataset into a continuous path. We do this here via linear interpolation.
+    # The resulting `train_coeffs` is a tensor describing the path.
+    # For most problems, it's probably easiest to save this tensor and treat it as the dataset.
     ######################
-    train_coeffs = torchcontroldiffeq.natural_cubic_spline_coeffs(train_t, train_X)
+    train_coeffs = torchcde.linear_interpolation_coeffs(train_X)
 
-    train_dataset = torch.utils.data.TensorDataset(*train_coeffs, train_y)
+    train_dataset = torch.utils.data.TensorDataset(train_coeffs, train_y)
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=32)
     for epoch in range(num_epochs):
         for batch in train_dataloader:
-            *batch_coeffs, batch_y = batch
-            pred_y = model(train_t, batch_coeffs).squeeze(-1)
+            batch_coeffs, batch_y = batch
+            pred_y = model(batch_coeffs).squeeze(-1)
             loss = torch.nn.functional.binary_cross_entropy_with_logits(pred_y, batch_y)
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
         print('Epoch: {}   Training loss: {}'.format(epoch, loss.item()))
 
-    test_t, test_X, test_y = get_data()
-    test_coeffs = torchcontroldiffeq.natural_cubic_spline_coeffs(test_t, test_X)
-    pred_y = model(test_t, test_coeffs).squeeze(-1)
+    test_X, test_y = get_data()
+    test_coeffs = torchcde.linear_interpolation_coeffs(test_X)
+    pred_y = model(test_coeffs).squeeze(-1)
     binary_prediction = (torch.sigmoid(pred_y) > 0.5).to(test_y.dtype)
     prediction_matches = (binary_prediction == test_y).to(test_y.dtype)
     proportion_correct = prediction_matches.sum() / test_y.size(0)

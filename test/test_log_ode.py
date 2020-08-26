@@ -1,6 +1,6 @@
 import signatory
 import torch
-import torchcontroldiffeq
+import torchcde
 
 
 def test_with_linear_interpolation():
@@ -23,12 +23,12 @@ def test_with_linear_interpolation():
             x = torch.cat(x_)
 
             window_length = (end - start) / pieces
-            logsig_t, logsig_x = torchcontroldiffeq.logsignature_windows(t, x, depth, window_length)
-            coeffs = torchcontroldiffeq.linear_interpolation_coeffs(logsig_t, logsig_x)
-            interp = torchcontroldiffeq.LinearInterpolation(logsig_t, coeffs)
+            logsig_x, logsig_t = torchcde.logsignature_windows(x, depth, window_length, t)
+            coeffs = torchcde.linear_interpolation_coeffs(logsig_x, logsig_t)
+            X = torchcde.LinearInterpolation(coeffs, logsig_t)
 
             point = 1
             for logsignature in logsignatures:
-                interp_logsignature = interp.derivative(t[point])
+                interp_logsignature = X.derivative(t[point])
                 assert interp_logsignature.allclose(logsignature)
                 point += 4

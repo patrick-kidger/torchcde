@@ -10,10 +10,10 @@ def register_computed_parameter(module, name, tensor):
     # function). This is needed to make sure that gradients aren't double-counted if we calculate one computed parameter
     # from another.
     try:
-        computed_parameters = module._torchcontroldiffeq_computed_parameters
+        computed_parameters = module._torchcde_computed_parameters
     except AttributeError:
         computed_parameters = {}
-        module._torchcontroldiffeq_computed_parameters = computed_parameters
+        module._torchcde_computed_parameters = computed_parameters
     for tens_name, tens_value in list(computed_parameters.items()):
         tens_value_view = tens_value.view(*tens_value.shape)
         module.register_buffer(tens_name, tens_value_view)
@@ -88,11 +88,19 @@ def tridiagonal_solve(b, A_upper, A_diagonal, A_lower):
     return torch.stack(outs.tolist(), dim=-1)
 
 
-def validate_input_path(t, X):
+def validate_input_path(x, t):
+    if not x.is_floating_point():
+        raise ValueError("X must both be floating point.")
+
+    if x.ndimension() < 2:
+        raise ValueError("X must have at least two dimensions, corresponding to time and channels. It instead has "
+                         "shape {}.".format(tuple(x.shape)))
+
+    if t is None:
+        t = torch.linspace(0, x.size(-2) - 1, x.size(-2), dtype=x.dtype, device=x.device)
+
     if not t.is_floating_point():
         raise ValueError("t must both be floating point.")
-    if not X.is_floating_point():
-        raise ValueError("X must both be floating point.")
     if len(t.shape) != 1:
         raise ValueError("t must be one dimensional. It instead has shape {}.".format(tuple(t.shape)))
     prev_t_i = -math.inf
@@ -101,15 +109,13 @@ def validate_input_path(t, X):
             raise ValueError("t must be monotonically increasing.")
         prev_t_i = t_i
 
-    if X.ndimension() < 2:
-        raise ValueError("X must have at least two dimensions, corresponding to time and channels. It instead has "
-                         "shape {}.".format(tuple(X.shape)))
-
-    if X.size(-2) != t.size(0):
+    if x.size(-2) != t.size(0):
         raise ValueError("The time dimension of X must equal the length of t. X has shape {} and t has shape {}, "
                          "corresponding to time dimensions of {} and {} respectively."
-                         .format(tuple(X.shape), tuple(t.shape), X.size(-2), t.size(0)))
+                         .format(tuple(x.shape), tuple(t.shape), x.size(-2), t.size(0)))
 
     if t.size(0) < 2:
         raise ValueError("Must have a time dimension of size at least 2. It instead has shape {}, corresponding to a "
                          "time dimension of size {}.".format(tuple(t.shape), t.size(0)))
+
+    return t
