@@ -3,8 +3,6 @@ import torchdiffeq
 
 
 def _check_compatability(X, func, z0, t):
-    if not isinstance(X, torch.nn.Module):
-        raise ValueError("X must be a torch.nn.Module.")
     if not hasattr(X, 'derivative'):
         raise ValueError("X must have a 'derivative' method.")
     control_gradient = X.derivative(t[0].detach())
