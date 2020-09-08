@@ -246,6 +246,10 @@ class NaturalCubicSpline(torch.nn.Module):
         misc.register_computed_parameter(self, '_three_d', three_d)
 
     @property
+    def grid_points(self):
+        return self._t
+
+    @property
     def interval(self):
         return torch.stack([self._t[0], self._t[-1]])
 

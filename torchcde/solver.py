@@ -3,8 +3,6 @@ import torchdiffeq
 
 
 def _check_compatability(X, func, z0, t):
-    if not isinstance(X, torch.nn.Module):
-        raise ValueError("X must be a torch.nn.Module.")
     if not hasattr(X, 'derivative'):
         raise ValueError("X must have a 'derivative' method.")
     control_gradient = X.derivative(t[0].detach())
@@ -14,8 +12,6 @@ def _check_compatability(X, func, z0, t):
                          "(meaning {} batch dimensions)."
                          "".format(tuple(control_gradient.shape), tuple(control_gradient.shape[:-1]), tuple(z0.shape),
                                    tuple(z0.shape[:-1])))
-    if not isinstance(func, torch.nn.Module):
-        raise ValueError("func must be a torch.nn.Module.")
     system = func(t[0], z0)
     if len(system.shape) < 2:
         raise ValueError("func did not return a tensor with enough dimensions. Expected 2 dimensions, got {} dimensions"
@@ -81,8 +77,9 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
             derivative at a point will be computed via `X.derivative(t)`, where t is a scalar tensor. The returned
             tensor should have shape (..., input_channels), where '...' is some number of batch dimensions and
             input_channels is the number of channels in the input path.
-        func: Should be an instance of `torch.nn.Module`. Describes the vector field f(t, z). Will be called with a
-            scalar tensor t and a tensor z of shape (..., hidden_channels), and should return a tensor of shape
+        func: Should be a callable describing the vector field f(t, z). If using `adjoint=True` (the default), then
+            should be an instance of `torch.nn.Module`, to collect the parameters for the adjoint pass. Will be called
+            with a scalar tensor t and a tensor z of shape (..., hidden_channels), and should return a tensor of shape
             (..., hidden_channels, input_channels), where hidden_channels and input_channels are integers defined by the
             `hidden_shape` and `X` arguments as above. The '...' corresponds to some number of batch dimensions.
         z0: The initial state of the solution. It should have shape (..., hidden_channels), where '...' is some number
@@ -91,8 +88,7 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
             The initial time will be t[0] and the final time will be t[-1].
         adjoint: A boolean; whether to use the adjoint method to backpropagate. Defaults to True.
         **kwargs: Any additional kwargs to pass to the odeint solver of torchdiffeq (the most common are `rtol`, `atol`,
-            `method`, `options`). Note that empirically, the solvers that seem to work best are "dopri5", "euler",
-            "midpoint", "rk4". Avoid all three Adams methods.
+            `method`, `options`).
 
     Returns:
         The value of each z_{t_i} of the solution to the CDE z_t = z_{t_0} + \int_0^t f(s, z_s)dX_s, where t_i = t[i].
@@ -126,7 +122,12 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
         try:
             adjoint_params = tuple(kwargs['adjoint_params'])
         except KeyError:
-            adjoint_params = tuple(func.parameters())
+            try:
+                adjoint_params = tuple(func.parameters())
+            except AttributeError:
+                raise ValueError("If using the adjoint, then either `adjoint_params` must be specified, or `func` "
+                                 "must be a `torch.nn.Module`, to collect the parameters that gradients are calculated "
+                                 "for.")
         try:
             computed_params = tuple(X._torchcde_computed_parameters.values())
         except AttributeError:
