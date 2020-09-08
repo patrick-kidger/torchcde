@@ -88,34 +88,33 @@ def test_stacked_paths():
     coeff_paths = [(torchcde.linear_interpolation_coeffs, torchcde.LinearInterpolation),
                    (torchcde.linear_interpolation_coeffs, ReparameterisedLinearInterpolation),
                    (torchcde.natural_cubic_spline_coeffs, torchcde.NaturalCubicSpline)]
-    for method in ('rk4', 'dopri5'):
-        for adjoint in (False, True):
-            for first_coeffs, First in coeff_paths:
-                for second_coeffs, Second in coeff_paths:
-                    first_path = torch.rand(1, 1000, 4, requires_grad=True)
-                    first_coeff = first_coeffs(first_path)
-                    first_X = First(first_coeff)
-                    first_func = _Func(input_size=4, hidden_size=4)
+    for adjoint in (False, True):
+        for first_coeffs, First in coeff_paths:
+            for second_coeffs, Second in coeff_paths:
+                first_path = torch.rand(1, 1000, 2, requires_grad=True)
+                first_coeff = first_coeffs(first_path)
+                first_X = First(first_coeff)
+                first_func = _Func(input_size=2, hidden_size=2)
 
-                    second_t = torch.linspace(0, 999, 100)
-                    second_path = torchcde.cdeint(X=first_X, func=first_func, z0=torch.rand(1, 4),
-                                                  t=second_t, adjoint=adjoint, method=method, rtol=1e-4, atol=1e-6)
-                    second_path = Record.apply('second', second_path)
-                    second_coeff = second_coeffs(second_path, second_t)
-                    second_X = Second(second_coeff, second_t)
-                    second_func = _Func(input_size=4, hidden_size=4)
+                second_t = torch.linspace(0, 999, 100)
+                second_path = torchcde.cdeint(X=first_X, func=first_func, z0=torch.rand(1, 2),
+                                              t=second_t, adjoint=adjoint, method='rk4', options=dict(step_size=10))
+                second_path = Record.apply('second', second_path)
+                second_coeff = second_coeffs(second_path, second_t)
+                second_X = Second(second_coeff, second_t)
+                second_func = _Func(input_size=2, hidden_size=2)
 
-                    third_t = torch.linspace(0, 999, 10)
-                    third_path = torchcde.cdeint(X=second_X, func=second_func, z0=torch.rand(1, 4),
-                                                 t=third_t, adjoint=adjoint, method=method, rtol=1e-4, atol=1e-6)
-                    third_path = Record.apply('third', third_path)
-                    assert first_func.variable.grad is None
-                    assert second_func.variable.grad is None
-                    assert first_path.grad is None
-                    third_path[:, -1].sum().backward()
-                    assert isinstance(second_func.variable.grad, torch.Tensor)
-                    assert isinstance(first_func.variable.grad, torch.Tensor)
-                    assert isinstance(first_path.grad, torch.Tensor)
+                third_t = torch.linspace(0, 999, 10)
+                third_path = torchcde.cdeint(X=second_X, func=second_func, z0=torch.rand(1, 2),
+                                             t=third_t, adjoint=adjoint, method='rk4', options=dict(step_size=10))
+                third_path = Record.apply('third', third_path)
+                assert first_func.variable.grad is None
+                assert second_func.variable.grad is None
+                assert first_path.grad is None
+                third_path[:, -1].sum().backward()
+                assert isinstance(second_func.variable.grad, torch.Tensor)
+                assert isinstance(first_func.variable.grad, torch.Tensor)
+                assert isinstance(first_path.grad, torch.Tensor)
 
 
 # Tests that the trick in which we use detaches in the backward pass if possible, does in fact work
