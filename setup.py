@@ -48,7 +48,7 @@ classifiers = ["Development Status :: 4 - Beta",
 
 python_requires = "~=3.6"
 
-install_requires = ['torch>=1.0.0', 'torchdiffeq>=0.1.0']
+install_requires = ['torch>=1.6.0', 'torchdiffeq>=0.1.0']
 
 setuptools.setup(name=name,
                  version=version,
