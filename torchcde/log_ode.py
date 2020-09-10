@@ -14,6 +14,9 @@ from . import misc
 
 def logsignature_windows(x, depth, window_length, t=None):
     """Calculates logsignatures over multiple windows, for the batch of controls given, as in the log-ODE method.
+    
+    This corresponds to a transform of the time series, and should be used prior to applying one of the interpolation
+    schemes.
 
     Arguments:
         x: tensor of values, of shape (..., length, input_channels), where ... is some number of batch dimensions. This
@@ -23,9 +26,6 @@ def logsignature_windows(x, depth, window_length, t=None):
         window_length: How long a time interval to compute logsignatures over.
         t: Optional one dimensional tensor of times. Must be monotonically increasing. If not passed will default to
             tensor([0., 1., ..., length - 1]).
-
-    In particular, the support for missing values allows for batching together elements that are observed at
-    different times; just set them to have missing values at each other's observation times.
 
     Warning:
         If there are missing values then calling this function can be pretty slow. Make sure to cache the result, and
