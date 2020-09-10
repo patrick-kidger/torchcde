@@ -3,7 +3,7 @@
 
 This library provides differentiable GPU-capable solvers for controlled differential equations (CDEs). Backpropagation through the solver or via the adjoint method is supported; the latter allows for improved memory efficiency.
 
-In particular this allows for building [Neural Controlled Differential Equation](https://github.com/patrick-kidger/NeuralCDE) models, which are state-of-the-art models for (potentially irregular) time series; they can be thought of as a "continuous time RNN".
+In particular this allows for building [Neural Controlled Differential Equation](https://github.com/patrick-kidger/NeuralCDE) models, which are state-of-the-art models for (arbitrarily irregular!) time series. Neural CDEs can be thought of as a "continuous time RNN".
 
 _Powered by the [`torchdiffeq`](https://github.com/rtqichen/torchdiffeq) library._
 
@@ -24,25 +24,26 @@ Requires PyTorch >=1.6.
 ## Example
 We encourage looking at [example.py](./example/example.py), which demonstrates how to use the library to train a Neural CDE model to predict the chirality of a spiral.
 
-Also see [irregular_data.py](./example/irregular_data.py) for an example of how to handle any kind of irregularity in the data.
+Also see [irregular_data.py](./example/irregular_data.py), for demonstrations on how to handle variable-length inputs, irregular sampling, or missing data, all of which can be handled easily, without changing the model.
 
-For a very simple example:
+A brief example:
 ```python
 import torch
 import torchcde
 
+# Create some data
 batch, length, input_channels = 1, 10, 2
 hidden_channels = 3
-
 t = torch.linspace(0, 1, length)
 t_ = t.unsqueeze(0).unsqueeze(-1).expand(batch, length, 1)
 x_ = torch.rand(batch, length, input_channels - 1)
-x = torch.cat([t_, x_], dim=2)
+x = torch.cat([t_, x_], dim=2)  # include time as a channel
 
+# Interpolate it
 coeffs = torchcde.natural_cubic_spline_coeffs(x)
 X = torchcde.NaturalCubicSpline(coeffs)
-z0 = torch.rand(batch, hidden_channels)
 
+# Create the Neural CDE system
 class F(torch.nn.Module):
     def __init__(self):
         super(F, self).__init__()
@@ -52,10 +53,11 @@ class F(torch.nn.Module):
         return self.linear(z).view(batch, hidden_channels, input_channels)
 
 func = F()
+z0 = torch.rand(batch, hidden_channels)
 
+# Integrate it
 torchcde.cdeint(X=X, func=func, z0=z0, t=X.interval)
 ```
-Note how time is explicitly included as a channel in `x`. (Important for Neural CDEs.)
 
 ## Citation
 If you found use this library useful, we would appreciate a citation:
