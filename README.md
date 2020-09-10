@@ -26,7 +26,7 @@ We encourage looking at [example.py](./example/example.py), which demonstrates h
 
 Also see [irregular_data.py](./example/irregular_data.py), for demonstrations on how to handle variable-length inputs, irregular sampling, or missing data, all of which can be handled easily, without changing the model.
 
-A brief example:
+A self contained short example:
 ```python
 import torch
 import torchcde
