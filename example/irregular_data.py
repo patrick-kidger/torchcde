@@ -1,6 +1,6 @@
 ######################
 # Processing irregular data is usually rather tricky.
-# One of the best bits about Neural CDEs is how it totally changes, and becomes really straightforward.
+# One of the best bits about Neural CDEs is how it is instead really straightforward.
 #
 # Here we'll look at how you can handle:
 # - variable-length sequences
