@@ -225,7 +225,7 @@ def informative_missingness():
     x1a, x1b = func(t1a), func(t1b)
 
     ######################
-    # Now w generate observational masks. We also fill in missing values with NaN just like before.
+    # Now we generate observational masks. We also fill in missing values with NaN just like before.
     ######################
 
     t1, sort_indices1 = torch.cat([t1a, t1b]).sort()
