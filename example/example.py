@@ -63,10 +63,7 @@ class NeuralCDE(torch.nn.Module):
         self.readout = torch.nn.Linear(hidden_channels, output_channels)
 
     def forward(self, coeffs):
-        ######################
-        # Can also use some other interpolation here; the original paper used cubic.
-        ######################
-        X = torchcde.LinearInterpolation(coeffs)
+        X = torchcde.NaturalCubicSpline(coeffs)
 
         ######################
         # Easy to forget gotcha: Initial hidden state should be a function of the first observation.
@@ -75,16 +72,11 @@ class NeuralCDE(torch.nn.Module):
 
         ######################
         # Actually solve the CDE.
-        # If using linear interpolation, make sure to tell the solver about the discontinuities in the linear
-        # interpolation via the `grid_points` option. (Linear interpolation has a `.grid_points` attribute precisely to
-        # make this eas.)
         ######################
         z_T = torchcde.cdeint(X=X,
                               z0=z0,
                               func=self.func,
-                              t=X.interval,
-                              method='dopri5',
-                              options=dict(grid_points=X.grid_points, eps=1e-5))
+                              t=X.interval)
 
         ######################
         # Both the initial value and the terminal value are returned from cdeint; extract just the terminal value,
@@ -139,11 +131,11 @@ def main(num_epochs=30):
     optimizer = torch.optim.Adam(model.parameters())
 
     ######################
-    # Now we turn our dataset into a continuous path. We do this here via linear interpolation.
+    # Now we turn our dataset into a continuous path. We do this here via natural cubic spline interpolation.
     # The resulting `train_coeffs` is a tensor describing the path.
     # For most problems, it's probably easiest to save this tensor and treat it as the dataset.
     ######################
-    train_coeffs = torchcde.linear_interpolation_coeffs(train_X)
+    train_coeffs = torchcde.natural_cubic_spline_coeffs(train_X)
 
     train_dataset = torch.utils.data.TensorDataset(train_coeffs, train_y)
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=32)
@@ -158,7 +150,7 @@ def main(num_epochs=30):
         print('Epoch: {}   Training loss: {}'.format(epoch, loss.item()))
 
     test_X, test_y = get_data()
-    test_coeffs = torchcde.linear_interpolation_coeffs(test_X)
+    test_coeffs = torchcde.natural_cubic_spline_coeffs(test_X)
     pred_y = model(test_coeffs).squeeze(-1)
     binary_prediction = (torch.sigmoid(pred_y) > 0.5).to(test_y.dtype)
     prediction_matches = (binary_prediction == test_y).to(test_y.dtype)
