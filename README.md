@@ -248,13 +248,13 @@ This is done by splitting the control `X` up into windows, and computing the _lo
 This is supported by the `logsignature_windows` function, which takes in data, and produces a transformed path, that now exists in logsignature space:
 ```python
 batch, length, channels = 1, 100, 2
-t = torch.linspace(0, 1, length)
 x = torch.rand(batch, length, channels)
 depth, window = 3, 0.2
-t, x = logsignature_windows(t, x, depth, window)
-# use t and x as you would normally: interpolate, etc.
+x, t = logsignature_windows(x, depth, window)
+# use x and t as you would normally: interpolate, etc.
+# note that t is regularly spaced and can likely be ignored for most purposes
 ```
 
-See the docstring of `logsignature_windows` for more information.
+See the paper [Neural CDEs for Long Time Series via the Log-ODE Method](https://arxiv.org/abs/2009.08295) for more information.
 
 _Note that this requires installing the [Signatory](https://github.com/patrick-kidger/signatory) package._
