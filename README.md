@@ -255,6 +255,6 @@ x, t = logsignature_windows(x, depth, window)
 # note that t is regularly spaced and can likely be ignored for most purposes
 ```
 
-See the paper [Neural CDEs for Long Time Series via the Log-ODE Method](https://arxiv.org/abs/2009.08295) for more information.
+See the paper [Neural CDEs for Long Time Series via the Log-ODE Method](https://github.com/jambo6/neuralCDEs-via-logODEs) for more information.
 
 _Note that this requires installing the [Signatory](https://github.com/patrick-kidger/signatory) package._
