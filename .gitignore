@@ -10,3 +10,4 @@ dist/
 *.so
 *.egg-info/
 **/.mypy_cache/
+env/

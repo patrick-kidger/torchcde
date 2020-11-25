@@ -119,3 +119,34 @@ def validate_input_path(x, t):
                          "time dimension of size {}.".format(tuple(t.shape), t.size(0)))
 
     return t
+
+
+def torch_ffill(data):
+    """Forward fills data in a torch tensor of shape [N, L, C] along the L dim.
+
+    Args:
+        data (torch.Tensor):
+
+    Returns:
+
+    """
+    # Checks
+    assert isinstance(data, torch.Tensor)
+    assert data.dim() == 3
+
+    # Function to fill a 2d tensor
+    def fill2d(x):
+        """ Forward fills in the L dimension if L is of shape [L, N]. """
+        mask = np.isnan(x)
+        idx = np.where(~mask, np.arange(mask.shape[1]), 0)
+        np.maximum.accumulate(idx, axis=1, out=idx)
+        out = x[np.arange(idx.shape[0])[:, None], idx]
+        return out
+
+    # Reshape to [N * C, L] and fill the 2d tensor
+    N, L, C = data.size()
+    data_shaped = data.transpose(1, 2).reshape(-1, L).numpy()
+    data_fill = fill2d(data_shaped).reshape(-1, C, L)
+    data_out = torch.Tensor(data_fill).transpose(1, 2)
+
+    return data_out
