@@ -103,25 +103,32 @@ def _prepare_rectilinear_interpolation(data, time_index):
         torchcde linear interpolation scheme to achieve rectilinear interpolation.
 
     Returns:
-        A tensor, now of shape [N, 2*L - 1, C] that can be fed to linear interpolation coeffs to give rectilinear
-            coeffs.
+        A tensor, now of shape (..., 2 * length - 1, input_channels] that can be fed to linear interpolation coeffs to
+            give rectilinear coeffs.
     """
     # Check time_index is of the correct format
-    n_channels = data.size(2)
-    assert isinstance(time_index, int), "Index of the time channel must be an integer in [0, {}]".format(n_channels)
-    assert 0 <= time_index < data.size(2), "Time index must be in [0, {}], was given {}.".format(n_channels, time_index)
+    n_channels = data.size(-1)
+    assert isinstance(time_index, int), "Index of the time channel must be an integer in [0, {}]".format(n_channels - 1)
+    assert 0 <= time_index < n_channels, "Time index must be in [0, {}], was given {}." \
+                                         "".format(n_channels - 1, time_index)
+    times = data[..., time_index]
     # Check the specified channel dim does not violate time conditions
-    times = data[:, :, time_index]
-    time_diffs = times[:, 1:] - times[:, :1]
+    # The following asserts ensure that no nan value is sandwiched in between time values
+    assert not torch.isnan(times[..., 0]).any(), "One or more of the time indexes start with a nan value."
+    nan_then_time_value = torch.isnan((times[..., :-1] * times[..., 1:])[~torch.isnan(times[..., 1:])]).any()
+    assert not nan_then_time_value, "One of more of the time paths has a nan in between non-nan times which is " \
+                                    "not allowed."
+    # This then asserts times are increasing
+    time_diffs = times[..., 1:] - times[..., :1]
     assert time_diffs[~torch.isnan(time_diffs)].min() > 0, "Found consecutive times with a difference <= 0." \
-                                                           "Please ensure that data[:, :, 0] corresponds to times " \
-                                                           "and ensure that they are increasing for each sample."
+                                                           "Please ensure that data[:, :, time_idx] corresponds to " \
+                                                           "times and ensure that they are increasing for each sample."
 
     # Forward fill and perform lag interleaving for rectilinear
-    data_filled = misc.torch_ffill(data)
-    data_repeat = data_filled.repeat_interleave(2, dim=1)
-    data_repeat[:, :-1, time_index] = data_repeat[:, 1:, time_index]
-    data_rect = data_repeat[:, :-1]
+    data_filled = misc.forward_fill(data)
+    data_repeat = data_filled.repeat_interleave(2, dim=-2)
+    data_repeat[..., :-1, time_index] = data_repeat[..., 1:, time_index]
+    data_rect = data_repeat[..., :-1, :]
 
     return data_rect
 
