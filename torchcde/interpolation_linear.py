@@ -111,18 +111,11 @@ def _prepare_rectilinear_interpolation(data, time_index):
     assert isinstance(time_index, int), "Index of the time channel must be an integer in [0, {}]".format(n_channels - 1)
     assert 0 <= time_index < n_channels, "Time index must be in [0, {}], was given {}." \
                                          "".format(n_channels - 1, time_index)
+
     times = data[..., time_index]
-    # Check the specified channel dim does not violate time conditions
-    # The following asserts ensure that no nan value is sandwiched in between time values
-    assert not torch.isnan(times[..., 0]).any(), "One or more of the time indexes start with a nan value."
-    nan_then_time_value = torch.isnan((times[..., :-1] * times[..., 1:])[~torch.isnan(times[..., 1:])]).any()
-    assert not nan_then_time_value, "One of more of the time paths has a nan in between non-nan times which is " \
-                                    "not allowed."
-    # This then asserts times are increasing
-    time_diffs = times[..., 1:] - times[..., :1]
-    assert time_diffs[~torch.isnan(time_diffs)].min() > 0, "Found consecutive times with a difference <= 0." \
-                                                           "Please ensure that data[:, :, time_idx] corresponds to " \
-                                                           "times and ensure that they are increasing for each sample."
+    assert not torch.isnan(times).any(), "There exist nan values in the time column which is not allowed. If the " \
+                                         "times are padded with nans after final time, a simple solution is to " \
+                                         "forward fill the final time."
 
     # Forward fill and perform lag interleaving for rectilinear
     data_filled = misc.forward_fill(data)
@@ -142,9 +135,10 @@ def linear_interpolation_coeffs(x, t=None, rectilinear=None):
             length-many observations. Missing values are supported, and should be represented as NaNs.
         t: Optional one dimensional tensor of times. Must be monotonically increasing. If not passed will default to
             tensor([0., 1., ..., length - 1]).
-        rectilinear: Optional integer. Used for performing rectilinear interpolation. Default is None which results in
-            standard linear interpolation. For rectilinear interpolation time *must* be a channel in x and the
-            `rectilinear` parameter must be an integer specifying the channel index location of the time index in x.
+        rectilinear: Optional integer. Used for performing rectilinear interpolation, this means between two points
+            interpolation is first performed in the time direction, then in the feature direction. Default is None which
+            results in standard linear interpolation. For rectilinear interpolation time *must* be a channel in x and
+            the `rectilinear` parameter must be an integer specifying the channel index location of the time index in x.
 
     In particular, the support for missing values allows for batching together elements that are observed at
     different times; just set them to have missing values at each other's observation times.

@@ -121,12 +121,14 @@ def validate_input_path(x, t):
     return t
 
 
-def forward_fill(x):
+def forward_fill(x, fill_index=-2):
     """Forward fills data in a torch tensor of shape (..., length, input_channels) along the length dim.
 
     Arguments:
         x: tensor of values with first channel index being time, of shape (..., length, input_channels), where ... is
             some number of batch dimensions.
+        fill_index: int that denotes the index to fill down. Default is -2 as we tend to use the convention (...,
+            length, input_channels) filling down the length dimension.
 
     Returns:
         A tensor with forward filled data.
@@ -136,15 +138,17 @@ def forward_fill(x):
     assert x.dim() >= 2
 
     if torch.isnan(x).any():
-        # Reshape to [-1, L]
-        L, C = x.size()[-2:]
-        x_shaped = x.transpose(-1, -2).reshape(-1, L)
+        # Fill index needs to be in the -1th dimensino
+        x_transposed = x.transpose(-1, fill_index)
+        # Reshape to [-1, length]
+        length = x_transposed.size(-1)
+        x_shaped = x_transposed.reshape(-1, length)
         # Fill the 2d tensor along the length dim
         mask = torch.isnan(x_shaped)
-        idx = torch.where(~mask, torch.arange(mask.shape[1]), 0)
+        idx = torch.where(~mask, torch.arange(mask.shape[1]).to(mask.device), 0)
         cummax_idx, _ = torch.cummax(idx, dim=1)
-        x_fill = x_shaped[torch.arange(cummax_idx.shape[0])[:, None], cummax_idx].reshape(-1, C, L)
-        # Map back to original size
-        x = x_fill.transpose(-1, -2).reshape(x.size())
+        x_filled = x_shaped[torch.arange(cummax_idx.shape[0])[:, None], cummax_idx].reshape(x_transposed.size())
+        # Back to normal dim
+        x = x_filled.transpose(-1, fill_index)
 
     return x

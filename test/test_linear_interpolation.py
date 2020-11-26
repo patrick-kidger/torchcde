@@ -1,6 +1,6 @@
 import torch
 import torchcde
-import unittest
+import pytest
 
 
 def test_random():
@@ -117,69 +117,72 @@ def test_specification_and_derivative():
                         assert derivative.allclose(autoderivative, atol=1e-5, rtol=1e-5)
 
 
-def test_rectilinear_preparation(self):
-    # Simple test
-    nan = float('nan')
-    t1 = torch.tensor([0.1, 0.2, 0.9]).view(-1, 1)
-    t2 = torch.tensor([0.2, 0.3]).view(-1, 1)
-    x1 = torch.tensor([0.4, nan, 1.1]).view(-1, 1)
-    x2 = torch.tensor([nan, 2.]).view(-1, 1)
-    x = torch.nn.utils.rnn.pad_sequence(
-        [torch.cat((t1, x1), -1), torch.cat((t2, x2), -1)], batch_first=True, padding_value=nan
-    )
-    x1_true = torch.tensor([[0.1, 0.2, 0.2, 0.9, 0.9], [0.4, 0.4, 0.4, 0.4, 1.1]]).T.view(-1, 2)
-    x2_true = torch.tensor([[0.2, 0.3, 0.3, 0.3, 0.3], [2., 2., 2., 2., 2.]]).T.view(-1, 2)
-    rect_true = torch.stack((x1_true, x2_true))
-    rectilinear = torchcde.linear_interpolation_coeffs(x, rectilinear=0)
-    assert torch.equal(rect_true[~torch.isnan(rect_true)], rectilinear[~torch.isnan(rectilinear)])
-    # Test also if we swap time time dimension
-    x_swap = x[:, :, [1, 0]]
-    rectilinear_swap = torchcde.linear_interpolation_coeffs(x_swap, rectilinear=1)
-    rect_swp = rect_true[:, :, [1, 0]]
-    assert torch.equal(rect_swp, rectilinear_swap)
+def test_rectilinear_preparation():
+    devices = ['cpu']
+    if torch.cuda.is_available():
+        devices.append('cuda')
 
-    # Additionally try a 2d case
-    assert torch.equal(rect_true[0], torchcde.linear_interpolation_coeffs(x[0], rectilinear=0))
-    # And a 4d case
-    x_4d = torch.stack([x, x])
-    rect_true_4d = torch.stack([rect_true, rect_true])
-    assert torch.equal(rect_true_4d, torchcde.linear_interpolation_coeffs(x_4d, rectilinear=0))
-
-    # Ensure error is thrown if time has a nan value between real values
-    x_time_nan = x.clone()
-    x_time_nan[0, 1, 0] = float('nan')
-    try:
-        torchcde.linear_interpolation_coeffs(x_time_nan, rectilinear=0)
-    except AssertionError:
-        pass
-
-    # Some randoms tests
-    n_channels = 10
-    for _ in range(5):
-        # Build some data with time
-        t_starts = torch.randn(5) ** 2
-        ts = [torch.linspace(t_start, t_start + 10, torch.randint(0, 50, (1,)).item()) for t_start in t_starts]
-        xs = [torch.randn(len(t), n_channels - 1) for t in ts]
+    for device in devices:
+        # Simple test
+        nan = float('nan')
+        t1 = torch.tensor([0.1, 0.2, 0.9]).view(-1, 1).to(device)
+        t2 = torch.tensor([0.2, 0.3]).view(-1, 1).to(device)
+        x1 = torch.tensor([0.4, nan, 1.1]).view(-1, 1).to(device)
+        x2 = torch.tensor([nan, 2.]).view(-1, 1).to(device)
         x = torch.nn.utils.rnn.pad_sequence(
-            [torch.cat([t_.view(-1, 1), x_], dim=1) for t_, x_ in zip(ts, xs)], batch_first=True, padding_value=nan
+            [torch.cat((t1, x1), -1), torch.cat((t2, x2), -1)], batch_first=True, padding_value=nan
         )
-        # Add some random nans about the place
-        mask = torch.randint(0, 5, (x.size(0), x.size(1), x.size(2) - 1), dtype=torch.float)
-        mask[mask == 0] = float('nan')
-        x[:, :, 1:] = x[:, :, 1:] * mask
-        # Fill
-        x_ffilled = torchcde.misc.forward_fill(x)
-        # Compute the true solution
-        N, L, C = x_ffilled.shape
-        rect_true = torch.zeros(N, 2 * L - 1, C)
-        lag = torch.cat([x_ffilled[:, 1:, [0]], x_ffilled[:, :-1, 1:]], dim=-1)
-        rect_true[:, ::2, ] = x_ffilled
-        rect_true[:, 1::2] = lag
-        # Need to backfill rect true
-        # Rectilinear solution
+        # We have to fill the time index forward because we currently dont allow nan times for rectilinear
+        x[:, :, 0] = torchcde.misc.forward_fill(x[:, :, 0], fill_index=-1)
+        # Build true solution
+        x1_true = torch.tensor([[0.1, 0.2, 0.2, 0.9, 0.9], [0.4, 0.4, 0.4, 0.4, 1.1]]).T.view(-1, 2).to(device)
+        x2_true = torch.tensor([[0.2, 0.3, 0.3, 0.3, 0.3], [2., 2., 2., 2., 2.]]).T.view(-1, 2).to(device)
+        rect_true = torch.stack((x1_true, x2_true))
+        # Apply rectilinear and compare
         rectilinear = torchcde.linear_interpolation_coeffs(x, rectilinear=0)
-        assert torch.equal(rect_true, rectilinear)
+        assert torch.equal(rect_true[~torch.isnan(rect_true)], rectilinear[~torch.isnan(rectilinear)])
+        # Test also if we swap time time dimension
+        x_swap = x[:, :, [1, 0]]
+        rectilinear_swap = torchcde.linear_interpolation_coeffs(x_swap, rectilinear=1)
+        rect_swp = rect_true[:, :, [1, 0]]
+        assert torch.equal(rect_swp, rectilinear_swap)
 
+        # Additionally try a 2d case
+        assert torch.equal(rect_true[0], torchcde.linear_interpolation_coeffs(x[0], rectilinear=0))
+        # And a 4d case
+        x_4d = torch.stack([x, x])
+        rect_true_4d = torch.stack([rect_true, rect_true])
+        assert torch.equal(rect_true_4d, torchcde.linear_interpolation_coeffs(x_4d, rectilinear=0))
 
-if __name__ == '__main__':
-    test_rectilinear_preparation()
+        # Ensure error is thrown if time has a nan value anywhere
+        x_time_nan = x.clone()
+        x_time_nan[0, 1, 0] = float('nan')
+        pytest.raises(AssertionError, torchcde.linear_interpolation_coeffs, x_time_nan, rectilinear=0)
+
+        # Some randoms tests
+        for _ in range(5):
+            # Build some data with time
+            t_starts = torch.randn(5).to(device) ** 2
+            ts = [torch.linspace(s, s + 10, torch.randint(2, 50, (1,)).item()).to(device) for s in t_starts]
+            xs = [torch.randn(len(t), 10 - 1).to(device) for t in ts]
+            x = torch.nn.utils.rnn.pad_sequence(
+                [torch.cat([t_.view(-1, 1), x_], dim=1) for t_, x_ in zip(ts, xs)], batch_first=True, padding_value=nan
+            )
+            # Add some random nans about the place
+            mask = torch.randint(0, 5, (x.size(0), x.size(1), x.size(2) - 1), dtype=torch.float).to(device)
+            mask[mask == 0] = float('nan')
+            x[:, :, 1:] = x[:, :, 1:] * mask
+            # We have to fill the time index forward because we currently dont allow nan times for rectilinear
+            x[:, :, 0] = torchcde.misc.forward_fill(x[:, :, 0], fill_index=-1)
+            # Fill
+            x_ffilled = torchcde.misc.forward_fill(x)
+            # Compute the true solution
+            N, L, C = x_ffilled.shape
+            rect_true = torch.zeros(N, 2 * L - 1, C).to(device)
+            lag = torch.cat([x_ffilled[:, 1:, [0]], x_ffilled[:, :-1, 1:]], dim=-1)
+            rect_true[:, ::2, ] = x_ffilled
+            rect_true[:, 1::2] = lag
+            # Need to backfill rect true
+            # Rectilinear solution
+            rectilinear = torchcde.linear_interpolation_coeffs(x, rectilinear=0)
+            assert torch.equal(rect_true[~torch.isnan(rect_true)], rectilinear[~torch.isnan(rect_true)])
