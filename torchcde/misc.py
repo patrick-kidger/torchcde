@@ -137,18 +137,9 @@ def forward_fill(x, fill_index=-2):
     assert isinstance(x, torch.Tensor)
     assert x.dim() >= 2
 
-    if torch.isnan(x).any():
-        # Fill index needs to be in the -1th dimensino
-        x_transposed = x.transpose(-1, fill_index)
-        # Reshape to [-1, length]
-        length = x_transposed.size(-1)
-        x_shaped = x_transposed.reshape(-1, length)
-        # Fill the 2d tensor along the length dim
-        mask = torch.isnan(x_shaped)
-        idx = torch.where(~mask, torch.arange(mask.shape[1]).to(mask.device), 0)
-        cummax_idx, _ = torch.cummax(idx, dim=1)
-        x_filled = x_shaped[torch.arange(cummax_idx.shape[0])[:, None], cummax_idx].reshape(x_transposed.size())
-        # Back to normal dim
-        x = x_filled.transpose(-1, fill_index)
+    mask = torch.isnan(x)
+    if mask.any():
+        _, index = (~mask).cummax(dim=fill_index)
+        x = x.gather(dim=fill_index, index=index)
 
     return x
