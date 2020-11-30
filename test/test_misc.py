@@ -34,11 +34,6 @@ def test_forward_fill():
         devices.append('cuda')
 
     for device in devices:
-        # Check indices returns as expected
-        indices_check = torch.tensor([False, False, True, True, False]).to(device).cummax(0).indices
-        desired_indices = torch.tensor([0, 1, 2, 3, 3]).to(device)
-        assert torch.equal(indices_check, desired_indices)
-
         # Check ffill
         for N, L, C in [(1, 5, 3), (2, 2, 2), (3, 2, 1)]:
             x = torch.randn(N, L, C).to(device)
