@@ -82,7 +82,51 @@ def _linear_interpolation_coeffs_with_missing_values(t, x):
         return misc.cheap_stack(out_pieces, dim=0)
 
 
-def linear_interpolation_coeffs(x, t=None):
+def _prepare_rectilinear_interpolation(data, time_index):
+    """Prepares data for rectilinear interpolation.
+
+    This function performs the relevant filling and lagging of the data needed to convert raw data into a format such
+    standard linear interpolation will give the rectilinear interpolation.
+
+    Arguments:
+        x: tensor of values with first channel index being time, of shape (..., length, input_channels), where ... is
+            some number of batch dimensions.
+        time_index: integer giving the index of the time channel.
+
+    Example:
+        Suppose we have data:
+            data = [(t1, x1), (t2, NaN), (t3, x3), ...]
+        that we wish to interpolate using a rectilinear scheme. The key point is that this is equivalent to a linear
+        interpolation on
+            data_rect = [(t1, x1), (t2, x1), (t2, x1), (t3, x1), (t3, x3) ...]
+        This function simply performs the conversion from `data` to `data_rect` so that we can apply the inbuilt
+        torchcde linear interpolation scheme to achieve rectilinear interpolation.
+
+    Returns:
+        A tensor, now of shape (..., 2 * length - 1, input_channels] that can be fed to linear interpolation coeffs to
+            give rectilinear coeffs.
+    """
+    # Check time_index is of the correct format
+    n_channels = data.size(-1)
+    assert isinstance(time_index, int), "Index of the time channel must be an integer in [0, {}]".format(n_channels - 1)
+    assert 0 <= time_index < n_channels, "Time index must be in [0, {}], was given {}." \
+                                         "".format(n_channels - 1, time_index)
+
+    times = data[..., time_index]
+    assert not torch.isnan(times).any(), "There exist nan values in the time column which is not allowed. If the " \
+                                         "times are padded with nans after final time, a simple solution is to " \
+                                         "forward fill the final time."
+
+    # Forward fill and perform lag interleaving for rectilinear
+    data_filled = misc.forward_fill(data)
+    data_repeat = data_filled.repeat_interleave(2, dim=-2)
+    data_repeat[..., :-1, time_index] = data_repeat[..., 1:, time_index]
+    data_rect = data_repeat[..., :-1, :]
+
+    return data_rect
+
+
+def linear_interpolation_coeffs(x, t=None, rectilinear=None):
     """Calculates the knots of the linear interpolation of the batch of controls given.
 
     Arguments:
@@ -91,6 +135,10 @@ def linear_interpolation_coeffs(x, t=None):
             length-many observations. Missing values are supported, and should be represented as NaNs.
         t: Optional one dimensional tensor of times. Must be monotonically increasing. If not passed will default to
             tensor([0., 1., ..., length - 1]).
+        rectilinear: Optional integer. Used for performing rectilinear interpolation, this means between two points
+            interpolation is first performed in the time direction, then in the feature direction. Default is None which
+            results in standard linear interpolation. For rectilinear interpolation time *must* be a channel in x and
+            the `rectilinear` parameter must be an integer specifying the channel index location of the time index in x.
 
     In particular, the support for missing values allows for batching together elements that are observed at
     different times; just set them to have missing values at each other's observation times.
@@ -106,6 +154,9 @@ def linear_interpolation_coeffs(x, t=None):
         way.
     """
     t = misc.validate_input_path(x, t)
+
+    if rectilinear is not None:
+        x = _prepare_rectilinear_interpolation(x, rectilinear)
 
     if torch.isnan(x).any():
         x = _linear_interpolation_coeffs_with_missing_values(t, x.transpose(-1, -2)).transpose(-1, -2)
