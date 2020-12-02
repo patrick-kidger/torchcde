@@ -68,7 +68,8 @@ class NeuralCDE(torch.nn.Module):
         ######################
         # Easy to forget gotcha: Initial hidden state should be a function of the first observation.
         ######################
-        z0 = self.initial(X.evaluate(0.))
+        X0 = X.evaluate(X.interval[0])
+        z0 = self.initial(X0)
 
         ######################
         # Actually solve the CDE.
