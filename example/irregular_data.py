@@ -173,20 +173,20 @@ def missing_data():
     # First get all the times that the first batch element was sampled at.
     t1, sort_indices1 = torch.cat([t1a, t1b]).sort()
     # Now add NaNs to each channel where the other channel was sampled.
-    x1a = torch.cat([x1a, torch.full_like(x1b, float('nan'))])[sort_indices1]
-    x1b = torch.cat([x1b, torch.full_like(x1a, float('nan'))])[sort_indices1]
+    x1a_ = torch.cat([x1a, torch.full_like(x1b, float('nan'))])[sort_indices1]
+    x1b_ = torch.cat([torch.full_like(x1a, float('nan')), x1b])[sort_indices1]
     # Stack them together. As always, don't forget to also append time as an extra channel.
-    x1 = torch.stack([t1, x1a, x1b], dim=1)
+    x1 = torch.stack([t1, x1a_, x1b_], dim=1)
 
-    # Now just do the same for the other batch elements.
+    # Now do the same for the other batch elements.
     t2, sort_indices2 = torch.cat([t2a, t2b]).sort()
-    x2a = torch.cat([x2a, torch.full_like(x2b, float('nan'))])[sort_indices2]
-    x2b = torch.cat([x2b, torch.full_like(x2a, float('nan'))])[sort_indices2]
-    x2 = torch.stack([t2, x2a, x2b], dim=1)
+    x2a_ = torch.cat([x2a, torch.full_like(x2b, float('nan'))])[sort_indices2]
+    x2b_ = torch.cat([torch.full_like(x2a, float('nan')), x2b])[sort_indices2]
+    x2 = torch.stack([t2, x2a_, x2b_], dim=1)
     t3, sort_indices3 = torch.cat([t3a, t3b]).sort()
-    x3a = torch.cat([x3a, torch.full_like(x3b, float('nan'))])[sort_indices3]
-    x3b = torch.cat([x3b, torch.full_like(x3a, float('nan'))])[sort_indices3]
-    x3 = torch.stack([t3, x3a, x3b], dim=1)
+    x3a_ = torch.cat([x3a, torch.full_like(x3b, float('nan'))])[sort_indices3]
+    x3b_ = torch.cat([torch.full_like(x3a, float('nan')), x3b])[sort_indices3]
+    x3 = torch.stack([t3, x3a_, x3b_], dim=1)
 
     ######################
     # Batch everything together
@@ -230,15 +230,15 @@ def informative_missingness():
 
     t1, sort_indices1 = torch.cat([t1a, t1b]).sort()
     mask1a = torch.cat([torch.ones_like(x1a), torch.zeros_like(x1b)])[sort_indices1]
-    mask1b = torch.cat([torch.ones_like(x1b), torch.zeros_like(x1a)])[sort_indices1]
-    x1a = torch.cat([x1a, torch.full_like(x1b, float('nan'))])[sort_indices1]
-    x1b = torch.cat([x1b, torch.full_like(x1a, float('nan'))])[sort_indices1]
+    mask1b = torch.cat([torch.zeros_like(x1a), torch.ones_like(x1b)])[sort_indices1]
+    x1a_ = torch.cat([x1a, torch.full_like(x1b, float('nan'))])[sort_indices1]
+    x1b_ = torch.cat([torch.full_like(x1a, float('nan')), x1b])[sort_indices1]
 
     ######################
     # Now stack everything together as before, using the cumulative sum of the masks.
     ######################
 
-    x1 = torch.stack([t1, x1a, x1b, mask1a.cumsum(dim=0), mask1b.cumsum(dim=0)], dim=1)
+    x1 = torch.stack([t1, x1a_, x1b_, mask1a.cumsum(dim=0), mask1b.cumsum(dim=0)], dim=1)
 
     ######################
     # And now do exactly as we did before: repeat the same procedure for every batch element, stack them together, solve
