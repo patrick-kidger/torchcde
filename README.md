@@ -5,8 +5,6 @@ This library provides differentiable GPU-capable solvers for controlled differen
 
 In particular this allows for building [Neural Controlled Differential Equation](https://github.com/patrick-kidger/NeuralCDE) models, which are state-of-the-art models for (arbitrarily irregular!) time series. Neural CDEs can be thought of as a "continuous time RNN".
 
-_Powered by the [`torchdiffeq`](https://github.com/rtqichen/torchdiffeq) library._
-
 ---
 
 <p align="center">
@@ -26,7 +24,7 @@ We encourage looking at [example.py](./example/example.py), which demonstrates h
 
 Also see [irregular_data.py](./example/irregular_data.py), for demonstrations on how to handle variable-length inputs, irregular sampling, or missing data, all of which can be handled easily, without changing the model.
 
-A self contained short example:
+A short self contained example:
 ```python
 import torch
 import torchcde
@@ -103,35 +101,34 @@ Adjoint backpropagation (which is slower but more memory efficient) can be toggl
 
 ### Constructing controls
 
- A very common scenario is to construct the continuous control`X` from discrete data (which may be irregularly sampled with missing values). To support this, we provide three interpolation schemes:
+ A very common scenario is to construct the continuous control`X` from discrete data (which may be irregularly sampled with missing values). To support this, we provide three main interpolation schemes:
  
 * Natural cubic splines
 * Linear interpolation
-* Reparameterised linear interpolation
+* Rectilinear interpolation
 
 _Note that if for some reason you already have a continuous control `X` then you won't need an interpolation scheme at all!_
 
-Natural cubic splines were used in the original [Neural CDE paper](https://arxiv.org/abs/2005.08926), and are usually a simple choice that "just works".
+Natural cubic splines are usually the best choice, if your data isn't arriving continuously over time. (Natural cubic splines aren't causal, so you need to have all your data up-front.) This is what was used in the original [Neural CDE paper](https://arxiv.org/abs/2005.08926). If causality is a concern then one of the two linear interpolations should be used, see the [Further Documentation](#further-documentation) below.
 
-To do this:
+Just demonstrating natural cubic splines for now:
 ```python
-coeffs = natural_cubic_spline_coeffs(x, t)
+coeffs = natural_cubic_spline_coeffs(x)
 
 # coeffs is a torch.Tensor you can save, load,
 # pass through Datasets and DataLoaders etc.
 
-X = NaturalCubicSpline(coeffs, t)
+X = NaturalCubicSpline(coeffs)
 ```
 where:
 * `x` is a Tensor of shape `(..., length, input_channels)`, where `...` is some number of batch dimensions. Missing data should be represented as a `NaN`.
-* `t` is an _optional_ Tensor of shape `(length,)` specifying the time that each observation was made at. If it is not passed then it will default to equal spacing. This argument will _not_ usually need to be used, even for irregular time series. Instead, time should be included as an additional channel of `x`. Here, `t` only determines the choice of parameterisation of the spline, which doesn't matter when solving a CDE. See the example [irregular_data.py](./example/irregular_data.py).
 
 The interface provided by `NaturalCubicSpline` is:
 
-* `.evaluate(t)`, where `t` is an any-dimensional Tensor, to evaluate the spline at any (collection of) points.
-* `.derivative(t)`, where `t` is an any-dimensional Tensor, to evaluate the derivative of the spline at any (collection of) points.
-* `.interval`, which gives the time interval the spline is defined over. (Often used as the `t` argument in `cdeint`.)
+* `.interval`, which gives the time interval the spline is defined over. (Often used as the `t` argument in `cdeint`.) This is determined implicitly from the length of the data, and so does _not_ in general correspond to the time your data was actually observed at. (See the [Further Documentation](#further-documentation) note on reparameterisation invariance.)
 * `.grid_points` is all of the knots in the spline, so that for example `X.evaluate(X.grid_points)` will recover the original data.
+* `.evaluate(t)`, where `t` is an any-dimensional Tensor, to evaluate the spline at any (collection of) time(s).
+* `.derivative(t)`, where `t` is an any-dimensional Tensor, to evaluate the derivative of the spline at any (collection of) time(s).
 
 Usually `natural_cubic_spline_coeffs` should be computed as a preprocessing step, whilst `NaturalCubicSpline` should be called inside the forward pass of your model. See [example.py](./example/example.py) for a worked example.
 
@@ -139,8 +136,6 @@ Then call:
 ```python
 cdeint(X=X, func=... z0=..., t=X.interval)
 ```
-
-_See the [further documentation](#further-documentation) at the bottom for discussion on the other interpolation schemes._
 
 ## Differences to `controldiffeq`
 If you've used the previous [`controldiffeq`](https://github.com/patrick-kidger/NeuralCDE/tree/master/controldiffeq) library then a couple things have been changed. See [DIFFERENCES.md](./DIFFERENCES.md).
@@ -152,14 +147,41 @@ If you're interested in extending `torchcde` then have a look at [EXTENDING.md](
 The earlier documentation section should give everything you need to get up and running.
 
 Here we discuss a few more advanced bits of functionality:
+* The reparameterisation invariance property of CDEs.
 * Other interpolation methods, and the differences between them.
-* The importance of the `grid_points` and `eps` options for linear interpolation with adaptive solvers.
 * The use of fixed solvers. (They just work.)
 * Stacking CDEs (i.e. controlling one by the output of another).
 * Computing logsignatures for the log-ODE method.
 
+#### Reparameterisation invariance
+TODO
+
 #### Different interpolation methods
-* Linear interpolation: these are causal, but are not smooth, which makes them hard to integrate - unless we tell the solver about the difficult points, in which case they become quite easy to integrate! (See the next section for more discussion on the `grid_points` and `eps` arguments.)
+In brief:
+ * Do you need causality?
+   * No: natural cubic splines.
+   * Yes: Is your data multivariate with missing values?
+     * No: linear interpolation
+     * Yes: rectilinear interpolation.
+     
+In more detail:
+     
+* Natural cubic splines: the fastest approach.
+
+These were a simple choice used in the original Neural CDE paper. They are non-causal, but are very smooth, which makes them easy to integrate and thus fast to use in the differential equation solvers. These are usually the best choice if you don't need causality.
+```python
+coeffs = natural_cubic_splines_coeffs(x)
+X = NaturalCubicSpline(coeffs)
+cdeint(X=X, ...)
+```
+
+* Linear interpolation: these are "kind-of" causal.
+
+If your data has just irregular sampling (but not missing data) then these are suitable: at inference you can wait at each time point for the next data point to arrive, then interpolate towards the next data point when it arrives, and solve the CDE over that interval. 
+
+If there is missing data, however, then this isn't possible. (As some of the channels don't have observations you can interpolate to.) In this case use rectilinear interpolation, below.
+
+Linear interpolation has kinks. If using adaptive solvers then it should be told about the kinks. (Rather than expensively finding them for itself -- slowing down to resolve the kink, and then speeding up again afterwards.) This is done with the `grid_points` and `eps` arguments:
 ```python
 coeffs = linear_interpolation_coeffs(x)
 X = LinearInterpolation(coeffs)
@@ -168,45 +190,27 @@ cdeint(X=X, ...,
        options=dict(grid_points=X.grid_points, eps=1e-5))
 ```
 
-* Reparameterised linear interpolation: these are causal, and quite smooth, making them reasonably easy to integrate.
+* Rectilinear interpolation: This is appropriate if there is missing data, and you need causality.
+
+What is done is to linearly interpolate forward in time (keeping the observations constant), and the linearly interpolate the values (keeping the time constant). This is possible because time is a channel (and the "time" of the differential equation doesn't matter, by the reparameterisation invariance of the previous section).
+
 ```python
-coeffs = linear_interpolation_coeffs(x)
-X = LinearInterpolation(coeffs, reparameterise='bump')
-cdeint(X=X, ...)  # no options necessary
+t = torch.linspace(0, 1, 10)
+x = torch.rand(2, 10, 3)
+t_ = t.unsqueeze(0).unsqueeze(-1).expand(2, 10, 1)
+x = torch.cat([t_, x], dim=-1)
+# `rectilinear` is the channel index corresponding to time
+coeffs = linear_interpolation_coeffs(x, rectilinear=0)
+X = LinearInterpolation(coeffs)
+cdeint(X=X, ...,
+       method='dopri5',
+       options=dict(grid_points=X.grid_points, eps=1e-5))
 ```
 
-* Natural cubic splines: these were a simple choice used in the original Neural CDE paper. They are non-causal, but are very smooth, which makes them easy to integrate.
-```python
-coeffs = natural_cubic_splines_coeffs(x)
-X = NaturalCubicSpline(coeffs)
-cdeint(X=X, ...)  # no options necessary
-```
+As before we should inform the solver about kinks.
 
-If causality is a concern (e.g. data is arriving continuously), then linear interpolation (either version) is the only choice.
+This can be a bit unintuitive at first. We suggest firing up matplotlib and plotting things to get a feel for what's going on.
 
-If causality isn't a concern, then natural cubic splines are usually a bit quicker than linear interpolation, but YMMV.
-
-Reparameterised linear interpolation is useful for one (quite unusual) special case: if you need causality _and_ derivatives with respect to `t`. These won't be calculated correctly with linear interpolation*, so use reparameterised linear interpolation instead.
-
-_*For mathematical reasons - that involves calculating `d2X/dt2`, which is measure-valued._
-
-#### `grid_points` and `eps` with linear interpolation and adaptive solvers
-
-_This section only applies to linear interpolation. Natural cubic splines and reparameterised linear interpolation don't need this._
-
-_This section only applies to adaptive solvers. Fixed solvers don't need this._
-
-If using linear interpolation, then integrating the CDE naively can be difficult: we get a jump in the derivative at each interpolation point, and this slows adaptive step size solvers down. First they have to slow down to resolve the point - and then they have to figure out that they can speed back up again afterwards.
-
-We can help them out by telling them about the presence of these jumps, so that they don't have to discover it for themselves.
-
-We do this by passing the `grid_points` option, which specify the points at which these jumps exist, so that the solver can place its integration points directly on the jump. The `torchde.LinearInterpolation` class provides a helper `.grid_points` property that can be passed to set the the grid points correctly, as in the previous section.
-
-There's one more important thing to include: the `eps` argument. Recall that we're solving the differential equation
-```
-dz/dt(t) = f(t, z)dX/dt(t)     z(t_0) = z0
-```
-where `X` is piecewise linear. Thus `dX/dt` is piecewise constant. We don't want to place our integration points exactly on the jumps, as `dX/dt` isn't really defined there. We need to place integration points just to the left, and just to the right, of the jumps. `eps` specifices how much to shift to the left or right, so it has just has to be some very small number above zero.
 
 #### Fixed solvers
 Solving CDEs (regardless of the choice of interpolation scheme in a Neural CDE) with fixed solvers like `euler`, `midpoint`, `rk4` etc. is pretty much exactly the same as solving an ODE with a fixed solver. Just make sure to set the `step_size` option to something sensible; for example the smallest gap between times:
@@ -234,7 +238,7 @@ h(t, v) = [g(t, u)f(t, z), f(t, z)]
 
 dv(t) = h(t, v(t))dX(t)      v(t_0) = v0
 ```
-and using `cdeint` as normal. This is probably simpler, but forces you to use the same solver for the whole system.
+and using `cdeint` as normal. This is usually the best way to do it! It's simpler and usually faster. (But forces you to use the same solver for the whole system, for example.)
 
 The second way is to have `cdeint` output `z(t)` at multiple times `t`, interpolate the discrete output into a continuous path, and then call `cdeint` again. This is probably less memory efficient, but allows for different choices of solver for each call to `cdeint`.
 
