@@ -38,7 +38,7 @@ x_ = torch.rand(batch, length, input_channels - 1)
 x = torch.cat([t_, x_], dim=2)  # include time as a channel
 
 # Interpolate it
-coeffs = torchcde.natural_cubic_spline_coeffs(x)
+coeffs = torchcde.natural_cubic_coeffs(x)
 X = torchcde.NaturalCubicSpline(coeffs)
 
 # Create the Neural CDE system
@@ -113,7 +113,7 @@ Natural cubic splines are usually the best choice, if your data isn't arriving c
 
 Just demonstrating natural cubic splines for now:
 ```python
-coeffs = natural_cubic_spline_coeffs(x)
+coeffs = natural_cubic_coeffs(x)
 
 # coeffs is a torch.Tensor you can save, load,
 # pass through Datasets and DataLoaders etc.
@@ -130,7 +130,7 @@ The interface provided by `NaturalCubicSpline` is:
 * `.evaluate(t)`, where `t` is an any-dimensional Tensor, to evaluate the spline at any (collection of) time(s).
 * `.derivative(t)`, where `t` is an any-dimensional Tensor, to evaluate the derivative of the spline at any (collection of) time(s).
 
-Usually `natural_cubic_spline_coeffs` should be computed as a preprocessing step, whilst `NaturalCubicSpline` should be called inside the forward pass of your model. See [example.py](./example/example.py) for a worked example.
+Usually `natural_cubic_coeffs` should be computed as a preprocessing step, whilst `NaturalCubicSpline` should be called inside the forward pass of your model. See [example.py](./example/example.py) for a worked example.
 
 Then call:
 ```python
@@ -178,7 +178,7 @@ In more detail:
 
 These were a simple choice used in the original Neural CDE paper. They are non-causal, but are very smooth, which makes them easy to integrate and thus fast to use in the differential equation solvers. These are usually the best choice if you don't need causality.
 ```python
-coeffs = natural_cubic_splines_coeffs(x)
+coeffs = natural_cubic_coeffs(x)
 X = NaturalCubicSpline(coeffs)
 cdeint(X=X, ...)
 ```

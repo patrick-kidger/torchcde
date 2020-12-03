@@ -23,7 +23,7 @@ def _solve_cde(x):
     # x should be of shape (batch, length, channels)
     
     # Create dataset
-    coeffs = torchcde.natural_cubic_spline_coeffs(x)
+    coeffs = torchcde.natural_cubic_coeffs(x)
 
     # Create model
     batch_size = x.size(0)
@@ -217,7 +217,7 @@ def missing_data():
     ######################
     # Let's recap what's happened here.
     # We indicated missing values by putting in some NaNs in `x`.
-    # Then when `natural_cubic_spline_coeffs` is called inside `_solve_cde`, it just did the interpolation over the
+    # Then when `natural_cubic_coeffs` is called inside `_solve_cde`, it just did the interpolation over the
     # missing values. Job done.
     ######################
 

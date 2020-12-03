@@ -3,7 +3,7 @@ We've made a few changes since [`controldiffeq`](https://github.com/patrick-kidg
 
 ## New features
 
-- Linear interpolation and reparameterised linear interpolation are now available, via `linear_interpolation_coeffs` and `LinearInterpolation`.
+- Linear interpolation and rectilinear linear interpolation are now available, via `linear_interpolation_coeffs` and `LinearInterpolation`.
 
 - Computing logsignatures over fixed windows is now available, for the log-ODE method, via `logsignature_windows`. (Using this functionality will require installing the [Signatory](https://github.com/patrick-kidger/signatory) package.)
 
@@ -17,9 +17,11 @@ We've made a few changes since [`controldiffeq`](https://github.com/patrick-kidg
 
 - The system `func` (the argument to `cdeint`) now also accepts time `t` as an argument when called. (Rather than just the state `z`.)
 
-- The arguments for `natural_cubic_spline_coeffs` and `NaturalCubicSpline` have been reordered. (For the sake of the next change.)
+- `natural_cubic_spline_coeffs` has been renamed `natural_cubic_coeffs`. (`natural_cubic_spline_coeffs` exists as well but is deprecated and exists only for backward compatibility.)
 
-- The time argument `t` for `natural_cubic_spline_coeffs` or `NaturalCubicSpline` is now optional. (By default an equally spaced parameterisation is now used.) Note that if using `NaturalCubicSpline` as an input to a CDE then this change shouldn't change things, because of the "reparameterisation invariance" property of CDEs, i.e. that it's just the output values that matter, not the parameterisation. See the example [irregular_data.py](./example/irregular_data.py).
+- The arguments for `natural_cubic_coeffs` and `NaturalCubicSpline` have been reordered. (For the sake of the next change.)
+
+- The time argument `t` for `natural_cubic_coeffs` or `NaturalCubicSpline` is now optional. (By default an equally spaced parameterisation is now used.) Note that if using `NaturalCubicSpline` as an input to a CDE then this change shouldn't change things, because of the "reparameterisation invariance" property of CDEs, i.e. that it's just the output values that matter, not the parameterisation. See the Further Documentation section of the readme, and the example [irregular_data.py](./example/irregular_data.py).
 
 ## Other changes
 

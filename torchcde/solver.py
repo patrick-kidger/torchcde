@@ -100,14 +100,6 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
     Warnings:
         Note that the returned tensor puts the sequence dimension second-to-last, rather than first like in
         `torchdiffeq.odeint`.
-
-        If you need gradients with respect to t (which is quite unusual, but still), then don't use the particular
-        combination of:
-         - adjoint=True (the default)
-         - linear interpolation with reparameterise='none' (the default) to construct X.
-        It doesn't work. (For mathematical reasons: the adjoint method requires access to d2X_dt2, which is
-        measure-valued for linear interpolation; this doesn't get detected during the solve so you wrongly end up with
-        zero gradient.) Switch to either natural cubic splines or reparameterise='bump'.
     """
 
     # Reduce the default values for the tolerances because CDEs are difficult to solve with the default high tolerances.

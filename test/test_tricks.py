@@ -46,7 +46,7 @@ def test_grad_paths():
         for adjoint in (True, False):
             t = torch.linspace(0, 9, 10, requires_grad=True)
             path = torch.rand(1, 10, 3, requires_grad=True)
-            coeffs = torchcde.natural_cubic_spline_coeffs(path, t)
+            coeffs = torchcde.natural_cubic_coeffs(path, t)
             cubic_spline = torchcde.NaturalCubicSpline(coeffs, t)
             z0 = torch.rand(1, 3, requires_grad=True)
             func = _Func(input_size=3, hidden_size=3)
@@ -87,7 +87,7 @@ def test_stacked_paths():
     ReparameterisedLinearInterpolation = ft.partial(torchcde.LinearInterpolation, reparameterise='bump')
     coeff_paths = [(torchcde.linear_interpolation_coeffs, torchcde.LinearInterpolation),
                    (torchcde.linear_interpolation_coeffs, ReparameterisedLinearInterpolation),
-                   (torchcde.natural_cubic_spline_coeffs, torchcde.NaturalCubicSpline)]
+                   (torchcde.natural_cubic_coeffs, torchcde.NaturalCubicSpline)]
     for adjoint in (False, True):
         for first_coeffs, First in coeff_paths:
             for second_coeffs, Second in coeff_paths:
@@ -124,7 +124,7 @@ def test_detach_trick():
     func = _Func(input_size=3, hidden_size=3)
 
     def interp_():
-        coeffs = torchcde.natural_cubic_spline_coeffs(path)
+        coeffs = torchcde.natural_cubic_coeffs(path)
         yield torchcde.NaturalCubicSpline(coeffs)
         coeffs = torchcde.linear_interpolation_coeffs(path)
         yield torchcde.LinearInterpolation(coeffs, reparameterise='bump')

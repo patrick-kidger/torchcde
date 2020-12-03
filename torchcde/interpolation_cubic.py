@@ -52,18 +52,18 @@ def _natural_cubic_spline_coeffs_without_missing_values(t, x):
     return a, b, two_c, three_d
 
 
-def _natural_cubic_spline_coeffs_with_missing_values(t, x):
+def _natural_cubic_spline_coeffs_with_missing_values(t, x, _version):
     if x.ndimension() == 1:
         # We have to break everything down to individual scalar paths because of the possibility of missing values
         # being different in different channels
-        return _natural_cubic_spline_coeffs_with_missing_values_scalar(t, x)
+        return _natural_cubic_spline_coeffs_with_missing_values_scalar(t, x, _version)
     else:
         a_pieces = []
         b_pieces = []
         two_c_pieces = []
         three_d_pieces = []
         for p in x.unbind(dim=0):  # TODO: parallelise over this
-            a, b, two_c, three_d = _natural_cubic_spline_coeffs_with_missing_values(t, p)
+            a, b, two_c, three_d = _natural_cubic_spline_coeffs_with_missing_values(t, p, _version)
             a_pieces.append(a)
             b_pieces.append(b)
             two_c_pieces.append(two_c)
@@ -74,10 +74,11 @@ def _natural_cubic_spline_coeffs_with_missing_values(t, x):
                 misc.cheap_stack(three_d_pieces, dim=0))
 
 
-def _natural_cubic_spline_coeffs_with_missing_values_scalar(t, x):
+def _natural_cubic_spline_coeffs_with_missing_values_scalar(t, x, _version):
     # t and x both have shape (length,)
 
-    not_nan = ~torch.isnan(x)
+    nan = torch.isnan(x)
+    not_nan = ~nan
     path_no_nan = x.masked_select(not_nan)
 
     if path_no_nan.size(0) == 0:
@@ -96,21 +97,35 @@ def _natural_cubic_spline_coeffs_with_missing_values_scalar(t, x):
     # option is just to extend the first piece backwards, and the final piece forwards. But polynomials tend to
     # behave badly when extended beyond the interval they were constructed on, so the results can easily end up
     # being awful.
-    # Instead we impute an observation at the very start equal to the first actual observation made, and impute an
-    # observation at the very end equal to the last actual observation made, and then proceed with splines as
-    # normal.
-    need_new_not_nan = False
-    if torch.isnan(x[0]):
-        if not need_new_not_nan:
-            x = x.clone()
-            need_new_not_nan = True
-        x[0] = path_no_nan[0]
-    if torch.isnan(x[-1]):
-        if not need_new_not_nan:
-            x = x.clone()
-            need_new_not_nan = True
-        x[-1] = path_no_nan[-1]
-    if need_new_not_nan:
+    if _version == 0:
+        # Instead we impute an observation at the very start equal to the first actual observation made, and impute an
+        # observation at the very end equal to the last actual observation made, and then proceed with splines as
+        # normal.
+        need_new_not_nan = False
+        if torch.isnan(x[0]):
+            if not need_new_not_nan:
+                x = x.clone()
+                need_new_not_nan = True
+            x[0] = path_no_nan[0]
+        if torch.isnan(x[-1]):
+            if not need_new_not_nan:
+                x = x.clone()
+                need_new_not_nan = True
+            x[-1] = path_no_nan[-1]
+        if need_new_not_nan:
+            not_nan = ~torch.isnan(x)
+            path_no_nan = x.masked_select(not_nan)
+    else:
+        # Instead we fill forward and backward from the first/last observation made. This is better than the previous
+        # approach as the splines instead rapidly stabilise to the first/last value.
+        cumsum_mask = not_nan.cumsum(dim=0)
+        cumsum_mask[nan] = -1
+        last_non_nan_index = cumsum_mask.argmax(dim=0)
+        cumsum_mask[nan] = 1 + last_non_nan_index
+        first_non_nan_index = cumsum_mask.argmin(dim=0)
+        x = x.clone()
+        x[:first_non_nan_index] = x[first_non_nan_index]
+        x[last_non_nan_index + 1:] = x[last_non_nan_index]
         not_nan = ~torch.isnan(x)
         path_no_nan = x.masked_select(not_nan)
     times_no_nan = t.masked_select(not_nan)
@@ -154,7 +169,70 @@ def _natural_cubic_spline_coeffs_with_missing_values_scalar(t, x):
 # The mathematics of this are adapted from  http://mathworld.wolfram.com/CubicSpline.html, although they only treat the
 # case of each piece being parameterised by [0, 1]. (We instead take the length of each piece to be the difference in
 # time stamps.)
+def _natural_cubic_spline_coeffs(x, t, _version):
+    t = misc.validate_input_path(x, t)
+
+    if torch.isnan(x).any():
+        # Transpose because channels are a batch dimension for the purpose of finding interpolating polynomials.
+        # b, two_c, three_d have shape (..., channels, length - 1)
+        a, b, two_c, three_d = _natural_cubic_spline_coeffs_with_missing_values(t, x.transpose(-1, -2), _version)
+    else:
+        # Can do things more quickly in this case.
+        a, b, two_c, three_d = _natural_cubic_spline_coeffs_without_missing_values(t, x.transpose(-1, -2))
+
+    # These all have shape (..., length - 1, channels)
+    a = a.transpose(-1, -2)
+    b = b.transpose(-1, -2)
+    two_c = two_c.transpose(-1, -2)
+    three_d = three_d.transpose(-1, -2)
+    coeffs = torch.cat([a, b, two_c, three_d], dim=-1)  # for simplicity put them all together
+    return coeffs
+
+
 def natural_cubic_spline_coeffs(x, t=None):
+    """Calculates the coefficients of the natural cubic spline approximation to the batch of controls given.
+
+    ********************
+    DEPRECATED: this now exists for backward compatibility. For new projects please use `natural_cubic_coeffs` instead,
+    which handles missing data at the start/end of a time series better.
+    ********************
+
+    Arguments:
+        x: tensor of values, of shape (..., length, input_channels), where ... is some number of batch dimensions. This
+            is interpreted as a (batch of) paths taking values in an input_channels-dimensional real vector space, with
+            length-many observations. Missing values are supported, and should be represented as NaNs.
+        t: Optional one dimensional tensor of times. Must be monotonically increasing. If not passed will default to
+            tensor([0., 1., ..., length - 1]). If you are using neural CDEs then you **do not need to use this
+            argument**. See the Further Documentation in README.md.
+
+    In particular, the support for missing values allows for batching together elements that are observed at
+    different times; just set them to have missing values at each other's observation times.
+
+    Warning:
+        If there are missing values then calling this function can be pretty slow. Make sure to cache the result, and
+        don't reinstantiate it on every forward pass, if at all possible.
+
+    Returns:
+        A tensor, which should in turn be passed to `torchcde.NaturalCubicSpline`.
+
+        Why do we do it like this? Because typically you want to use PyTorch tensors at various interfaces, for example
+        when loading a batch from a DataLoader. If we wrapped all of this up into just the
+        `torchcde.NaturalCubicSpline` class then that sort of thing wouldn't be possible.
+
+        As such the suggested use is to:
+        (a) Load your data.
+        (b) Preprocess it with this function.
+        (c) Save the result.
+        (d) Treat the result as your dataset as far as PyTorch's `torch.utils.data.Dataset` and
+            `torch.utils.data.DataLoader` classes are concerned.
+        (e) Call NaturalCubicSpline as the first part of your model.
+
+        See also the accompanying example.py.
+    """
+    return _natural_cubic_spline_coeffs(x, t, _version=0)
+
+
+def natural_cubic_coeffs(x, t=None):
     """Calculates the coefficients of the natural cubic spline approximation to the batch of controls given.
 
     Arguments:
@@ -189,23 +267,7 @@ def natural_cubic_spline_coeffs(x, t=None):
 
         See also the accompanying example.py.
     """
-    t = misc.validate_input_path(x, t)
-
-    if torch.isnan(x).any():
-        # Transpose because channels are a batch dimension for the purpose of finding interpolating polynomials.
-        # b, two_c, three_d have shape (..., channels, length - 1)
-        a, b, two_c, three_d = _natural_cubic_spline_coeffs_with_missing_values(t, x.transpose(-1, -2))
-    else:
-        # Can do things more quickly in this case.
-        a, b, two_c, three_d = _natural_cubic_spline_coeffs_without_missing_values(t, x.transpose(-1, -2))
-
-    # These all have shape (..., length - 1, channels)
-    a = a.transpose(-1, -2)
-    b = b.transpose(-1, -2)
-    two_c = two_c.transpose(-1, -2)
-    three_d = three_d.transpose(-1, -2)
-    coeffs = torch.cat([a, b, two_c, three_d], dim=-1)  # for simplicity put them all together
-    return coeffs
+    return _natural_cubic_spline_coeffs(x, t, _version=1)
 
 
 class NaturalCubicSpline(torch.nn.Module):
@@ -214,7 +276,7 @@ class NaturalCubicSpline(torch.nn.Module):
     Example:
         # (2, 1) are batch dimensions. 7 is the time dimension (of the same length as t). 3 is the channel dimension.
         x = torch.rand(2, 1, 7, 3)
-        coeffs = natural_cubic_spline_coeffs(x)
+        coeffs = natural_cubic_coeffs(x)
         # ...at this point you can save coeffs, put it through PyTorch's Datasets and DataLoaders, etc...
         spline = NaturalCubicSpline(coeffs)
         point = torch.tensor(0.4)
@@ -225,7 +287,7 @@ class NaturalCubicSpline(torch.nn.Module):
     def __init__(self, coeffs, t=None, **kwargs):
         """
         Arguments:
-            coeffs: As returned by `torchcde.natural_cubic_spline_coeffs`.
+            coeffs: As returned by `torchcde.natural_cubic_coeffs`.
             t: As passed to linear_interpolation_coeffs. (If it was passed. If you are using neural CDEs then you **do
                 not need to use this argument**. See the Further Documentation in README.md.)
         """

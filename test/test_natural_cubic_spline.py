@@ -54,88 +54,91 @@ class _Offset:
 
 
 def test_interp():
-    for _ in range(3):
-        for use_t in (True, False):
-            for drop in (False, True):
-                num_points = torch.randint(low=5, high=100, size=(1,)).item()
-                half_num_points = num_points // 2
-                num_points = 2 * half_num_points + 1
-                if use_t:
-                    times1 = torch.rand(half_num_points, dtype=torch.float64) - 1
-                    times2 = torch.rand(half_num_points, dtype=torch.float64)
-                    t = torch.cat([times1, times2, torch.tensor([0.], dtype=torch.float64)]).sort().values
-                    t_ = t
-                    start, end = -1.5, 1.5
-                    del times1, times2
-                else:
-                    t = torch.linspace(0, num_points - 1, num_points, dtype=torch.float64)
-                    t_ = None
-                    start = 0
-                    end = num_points - 0.5
-                num_channels = torch.randint(low=1, high=3, size=(1,)).item()
-                num_batch_dims = torch.randint(low=0, high=3, size=(1,)).item()
-                batch_dims = []
-                for _ in range(num_batch_dims):
-                    batch_dims.append(torch.randint(low=1, high=3, size=(1,)).item())
-                if use_t:
-                    cubic = _Cubic(batch_dims, num_channels, start=t[0], end=t[-1])
-                    knot = 0
-                else:
-                    cubic = _Offset(batch_dims, num_channels, start=t[0], end=t[-1], offset=t[1] - t[0])
-                    knot = t[1] - t[0]
-                values = cubic.evaluate(t)
-                if drop:
-                    for values_slice in values.unbind(dim=-1):
-                        num_drop = int(num_points * torch.randint(low=1, high=4, size=(1,)).item() / 10)
-                        num_drop = min(num_drop, num_points - 4)
-                        # don't drop first or last
-                        to_drop = torch.randperm(num_points - 2)[:num_drop] + 1
-                        to_drop = [x for x in to_drop if x != knot]
-                        values_slice[..., to_drop] = float('nan')
-                        del num_drop, to_drop, values_slice
-                coeffs = torchcde.natural_cubic_spline_coeffs(values, t_)
-                spline = torchcde.NaturalCubicSpline(coeffs, t_)
-                _test_equal(batch_dims, num_channels, cubic, spline, torch.float64, start, end, 1e-3)
+    for interp_fn in (torchcde.natural_cubic_coeffs, torchcde.natural_cubic_spline_coeffs):
+        for _ in range(3):
+            for use_t in (True, False):
+                for drop in (False, True):
+                    num_points = torch.randint(low=5, high=100, size=(1,)).item()
+                    half_num_points = num_points // 2
+                    num_points = 2 * half_num_points + 1
+                    if use_t:
+                        times1 = torch.rand(half_num_points, dtype=torch.float64) - 1
+                        times2 = torch.rand(half_num_points, dtype=torch.float64)
+                        t = torch.cat([times1, times2, torch.tensor([0.], dtype=torch.float64)]).sort().values
+                        t_ = t
+                        start, end = -1.5, 1.5
+                        del times1, times2
+                    else:
+                        t = torch.linspace(0, num_points - 1, num_points, dtype=torch.float64)
+                        t_ = None
+                        start = 0
+                        end = num_points - 0.5
+                    num_channels = torch.randint(low=1, high=3, size=(1,)).item()
+                    num_batch_dims = torch.randint(low=0, high=3, size=(1,)).item()
+                    batch_dims = []
+                    for _ in range(num_batch_dims):
+                        batch_dims.append(torch.randint(low=1, high=3, size=(1,)).item())
+                    if use_t:
+                        cubic = _Cubic(batch_dims, num_channels, start=t[0], end=t[-1])
+                        knot = 0
+                    else:
+                        cubic = _Offset(batch_dims, num_channels, start=t[0], end=t[-1], offset=t[1] - t[0])
+                        knot = t[1] - t[0]
+                    values = cubic.evaluate(t)
+                    if drop:
+                        for values_slice in values.unbind(dim=-1):
+                            num_drop = int(num_points * torch.randint(low=1, high=4, size=(1,)).item() / 10)
+                            num_drop = min(num_drop, num_points - 4)
+                            # don't drop first or last
+                            to_drop = torch.randperm(num_points - 2)[:num_drop] + 1
+                            to_drop = [x for x in to_drop if x != knot]
+                            values_slice[..., to_drop] = float('nan')
+                            del num_drop, to_drop, values_slice
+                    coeffs = interp_fn(values, t_)
+                    spline = torchcde.NaturalCubicSpline(coeffs, t_)
+                    _test_equal(batch_dims, num_channels, cubic, spline, torch.float64, start, end, 1e-3)
 
 
 def test_linear():
-    for use_t in (False, True):
-        start = torch.rand(1).item() * 5 - 2.5
-        end = torch.rand(1).item() * 5 - 2.5
-        start, end = min(start, end), max(start, end)
-        num_points = torch.randint(low=2, high=10, size=(1,)).item()
-        num_channels = torch.randint(low=1, high=4, size=(1,)).item()
-        m = torch.rand(num_channels) * 5 - 2.5
-        c = torch.rand(num_channels) * 5 - 2.5
-        if use_t:
-            t = torch.linspace(start, end, num_points)
-            t_ = t
-        else:
-            t = torch.linspace(0, num_points - 1, num_points)
-            t_ = None
-        values = m * t.unsqueeze(-1) + c
-        coeffs = torchcde.natural_cubic_spline_coeffs(values, t_)
-        spline = torchcde.NaturalCubicSpline(coeffs, t_)
-        coeffs2 = torchcde.linear_interpolation_coeffs(values, t_)
-        linear = torchcde.LinearInterpolation(coeffs2, t_)
-        batch_dims = []
-        _test_equal(batch_dims, num_channels, linear, spline, torch.float32, -1.5, 1.5, 1e-4)
+    for interp_fn in (torchcde.natural_cubic_coeffs, torchcde.natural_cubic_spline_coeffs):
+        for use_t in (False, True):
+            start = torch.rand(1).item() * 5 - 2.5
+            end = torch.rand(1).item() * 5 - 2.5
+            start, end = min(start, end), max(start, end)
+            num_points = torch.randint(low=2, high=10, size=(1,)).item()
+            num_channels = torch.randint(low=1, high=4, size=(1,)).item()
+            m = torch.rand(num_channels) * 5 - 2.5
+            c = torch.rand(num_channels) * 5 - 2.5
+            if use_t:
+                t = torch.linspace(start, end, num_points)
+                t_ = t
+            else:
+                t = torch.linspace(0, num_points - 1, num_points)
+                t_ = None
+            values = m * t.unsqueeze(-1) + c
+            coeffs = interp_fn(values, t_)
+            spline = torchcde.NaturalCubicSpline(coeffs, t_)
+            coeffs2 = torchcde.linear_interpolation_coeffs(values, t_)
+            linear = torchcde.LinearInterpolation(coeffs2, t_)
+            batch_dims = []
+            _test_equal(batch_dims, num_channels, linear, spline, torch.float32, -1.5, 1.5, 1e-4)
 
 
 def test_short():
-    for use_t in (False, True):
-        if use_t:
-            t = torch.tensor([0., 1.])
-        else:
-            t = None
-        values = torch.rand(2, 1)
-        coeffs = torchcde.natural_cubic_spline_coeffs(values, t)
-        spline = torchcde.NaturalCubicSpline(coeffs, t)
-        coeffs2 = torchcde.linear_interpolation_coeffs(values, t)
-        linear = torchcde.LinearInterpolation(coeffs2, t)
-        batch_dims = []
-        num_channels = 1
-        _test_equal(batch_dims, num_channels, linear, spline, torch.float32, -1.5, 1.5, 1e-4)
+    for interp_fn in (torchcde.natural_cubic_coeffs, torchcde.natural_cubic_spline_coeffs):
+        for use_t in (False, True):
+            if use_t:
+                t = torch.tensor([0., 1.])
+            else:
+                t = None
+            values = torch.rand(2, 1)
+            coeffs = interp_fn(values, t)
+            spline = torchcde.NaturalCubicSpline(coeffs, t)
+            coeffs2 = torchcde.linear_interpolation_coeffs(values, t)
+            linear = torchcde.LinearInterpolation(coeffs2, t)
+            batch_dims = []
+            num_channels = 1
+            _test_equal(batch_dims, num_channels, linear, spline, torch.float32, -1.5, 1.5, 1e-4)
 
 
 # TODO: test other edge cases
@@ -161,37 +164,38 @@ def _test_equal(batch_dims, num_channels, obj1, obj2, dtype, start, end, tol):
 
 
 def test_specification_and_derivative():
-    for _ in range(10):
-        for use_t in (False, True):
-            for num_batch_dims in (0, 1, 2, 3):
-                batch_dims = []
-                for _ in range(num_batch_dims):
-                    batch_dims.append(torch.randint(low=1, high=3, size=(1,)).item())
-                length = torch.randint(low=5, high=10, size=(1,)).item()
-                channels = torch.randint(low=1, high=5, size=(1,)).item()
-                if use_t:
-                    t = torch.linspace(0, 1, length, dtype=torch.float64)
-                else:
-                    t = torch.linspace(0, length - 1, length, dtype=torch.float64)
-                x = torch.rand(*batch_dims, length, channels, dtype=torch.float64)
-                coeffs = torchcde.natural_cubic_spline_coeffs(x, t)
-                spline = torchcde.NaturalCubicSpline(coeffs, t)
-                # Test specification
-                for i, point in enumerate(t):
-                    evaluate = spline.evaluate(point)
-                    xi = x[..., i, :]
-                    assert evaluate.allclose(xi, atol=1e-5, rtol=1e-5)
-                # Test derivative
-                for point in torch.rand(100, dtype=torch.float64):
-                    point_with_grad = point.detach().requires_grad_(True)
-                    evaluate = spline.evaluate(point_with_grad)
-                    derivative = spline.derivative(point)
-                    autoderivative = []
-                    for elem in evaluate.view(-1):
-                        elem.backward(retain_graph=True)
-                        with torch.no_grad():
-                            autoderivative.append(point_with_grad.grad.clone())
-                        point_with_grad.grad.zero_()
-                    autoderivative = torch.stack(autoderivative).view(*evaluate.shape)
-                    assert derivative.shape == autoderivative.shape
-                    assert derivative.allclose(autoderivative, atol=1e-5, rtol=1e-5)
+    for interp_fn in (torchcde.natural_cubic_coeffs, torchcde.natural_cubic_spline_coeffs):
+        for _ in range(10):
+            for use_t in (False, True):
+                for num_batch_dims in (0, 1, 2, 3):
+                    batch_dims = []
+                    for _ in range(num_batch_dims):
+                        batch_dims.append(torch.randint(low=1, high=3, size=(1,)).item())
+                    length = torch.randint(low=5, high=10, size=(1,)).item()
+                    channels = torch.randint(low=1, high=5, size=(1,)).item()
+                    if use_t:
+                        t = torch.linspace(0, 1, length, dtype=torch.float64)
+                    else:
+                        t = torch.linspace(0, length - 1, length, dtype=torch.float64)
+                    x = torch.rand(*batch_dims, length, channels, dtype=torch.float64)
+                    coeffs = interp_fn(x, t)
+                    spline = torchcde.NaturalCubicSpline(coeffs, t)
+                    # Test specification
+                    for i, point in enumerate(t):
+                        evaluate = spline.evaluate(point)
+                        xi = x[..., i, :]
+                        assert evaluate.allclose(xi, atol=1e-5, rtol=1e-5)
+                    # Test derivative
+                    for point in torch.rand(100, dtype=torch.float64):
+                        point_with_grad = point.detach().requires_grad_(True)
+                        evaluate = spline.evaluate(point_with_grad)
+                        derivative = spline.derivative(point)
+                        autoderivative = []
+                        for elem in evaluate.view(-1):
+                            elem.backward(retain_graph=True)
+                            with torch.no_grad():
+                                autoderivative.append(point_with_grad.grad.clone())
+                            point_with_grad.grad.zero_()
+                        autoderivative = torch.stack(autoderivative).view(*evaluate.shape)
+                        assert derivative.shape == autoderivative.shape
+                        assert derivative.allclose(autoderivative, atol=1e-5, rtol=1e-5)

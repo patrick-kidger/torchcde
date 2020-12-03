@@ -153,7 +153,7 @@ def linear_interpolation_coeffs(x, t=None, rectilinear=None):
     Returns:
         A tensor, which should in turn be passed to `torchcde.LinearInterpolation`.
 
-        See the docstring for `torchcde.natural_cubic_spline_coeffs` for more information on why we do it this
+        See the docstring for `torchcde.natural_cubic_coeffs` for more information on why we do it this
         way.
     """
     if rectilinear is not None:
