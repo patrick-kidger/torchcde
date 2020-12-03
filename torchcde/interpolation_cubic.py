@@ -162,7 +162,8 @@ def natural_cubic_spline_coeffs(x, t=None):
             is interpreted as a (batch of) paths taking values in an input_channels-dimensional real vector space, with
             length-many observations. Missing values are supported, and should be represented as NaNs.
         t: Optional one dimensional tensor of times. Must be monotonically increasing. If not passed will default to
-            tensor([0., 1., ..., length - 1]).
+            tensor([0., 1., ..., length - 1]). If you are using neural CDEs then you **do not need to use this
+            argument**. See the Further Documentation in README.md.
 
     In particular, the support for missing values allows for batching together elements that are observed at
     different times; just set them to have missing values at each other's observation times.
@@ -225,7 +226,8 @@ class NaturalCubicSpline(torch.nn.Module):
         """
         Arguments:
             coeffs: As returned by `torchcde.natural_cubic_spline_coeffs`.
-            t: As passed to linear_interpolation_coeffs. (If it was passed.)
+            t: As passed to linear_interpolation_coeffs. (If it was passed. If you are using neural CDEs then you **do
+                not need to use this argument**. See the Further Documentation in README.md.)
         """
         super(NaturalCubicSpline, self).__init__(**kwargs)
 

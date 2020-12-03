@@ -134,18 +134,21 @@ def linear_interpolation_coeffs(x, t=None, rectilinear=None):
             is interpreted as a (batch of) paths taking values in an input_channels-dimensional real vector space, with
             length-many observations. Missing values are supported, and should be represented as NaNs.
         t: Optional one dimensional tensor of times. Must be monotonically increasing. If not passed will default to
-            tensor([0., 1., ..., length - 1]).
-        rectilinear: Optional integer. Used for performing rectilinear interpolation, this means between two points
-            interpolation is first performed in the time direction, then in the feature direction. Default is None which
-            results in standard linear interpolation. For rectilinear interpolation time *must* be a channel in x and
-            the `rectilinear` parameter must be an integer specifying the channel index location of the time index in x.
+            tensor([0., 1., ..., length - 1]). If you are using neural CDEs then you **do not need to use this
+            argument**. See the Further Documentation in README.md.
+        rectilinear: Optional integer. Used for performing rectilinear interpolation. This means that interpolation
+            between each two adjoint points is done by first interpolating in the time direction, and then interpolating
+            in the feature direction. (This is useful for causal missing data, see the Further Documentation in
+            README.md.) Defaults to None, i.e. not performing rectilinear interpolation. For rectilinear interpolation
+            time *must* be a channel in x and the `rectilinear` parameter must be an integer specifying the channel
+            index location of the time index in x.
 
     In particular, the support for missing values allows for batching together elements that are observed at
     different times; just set them to have missing values at each other's observation times.
 
     Warning:
         If there are missing values then calling this function can be pretty slow. Make sure to cache the result, and
-        don't reinstantiate it on every forward pass, if at all possible.
+        don't call it on every forward pass, if at all possible.
 
     Returns:
         A tensor, which should in turn be passed to `torchcde.LinearInterpolation`.
@@ -170,9 +173,8 @@ class LinearInterpolation(torch.nn.Module):
         """
         Arguments:
             coeffs: As returned by linear_interpolation_coeffs.
-            t: As passed to linear_interpolation_coeffs. (If it was passed.)
-            reparameterise: Either 'none' or 'bump'. Defaults to 'none'. Reparameterising each linear piece can help
-                adaptive step size solvers, in particular those that aren't aware of where the kinks in the path are.
+            t: As passed to linear_interpolation_coeffs. (If it was passed. If you are using neural CDEs then you **do
+                not need to use this argument**. See the Further Documentation in README.md.)
         """
         super(LinearInterpolation, self).__init__(**kwargs)
         assert reparameterise in ('none', 'bump')
