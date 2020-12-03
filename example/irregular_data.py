@@ -51,7 +51,7 @@ def _solve_cde(x):
             X = torchcde.NaturalCubicSpline(coeffs)
             X0 = X.evaluate(X.interval[0])
             z0 = self.initial(X0)
-            zt = torchcde.cdeint(X=X, func=func, z0=z0, t=X.interval)
+            zt = torchcde.cdeint(X=X, func=self.func, z0=z0, t=X.interval)
             zT = zt[:, -1]  # get the terminal value of the CDE
             return self.readout(zT)
         
