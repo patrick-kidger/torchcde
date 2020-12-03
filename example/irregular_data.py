@@ -21,14 +21,15 @@ import torchcde
 ######################
 def _solve_cde(x):
     # x should be of shape (batch, length, channels)
+    
+    # Create dataset
+    coeffs = torchcde.natural_cubic_spline_coeffs(x)
 
+    # Create model
     batch_size = x.size(0)
     input_channels = x.size(2)
     hidden_channels = 4  # hyperparameter, we can pick whatever we want for this
-
-    coeffs = torchcde.natural_cubic_spline_coeffs(x)
-    X = torchcde.NaturalCubicSpline(coeffs)
-    z0 = torch.rand(batch_size, hidden_channels)
+    output_channels = 4  # e.g. to perform 4-way multiclass classification
 
     class F(torch.nn.Module):
         def __init__(self):
@@ -38,12 +39,26 @@ def _solve_cde(x):
 
         def forward(self, t, z):
             return self.linear(z).view(batch_size, hidden_channels, input_channels)
-
-    func = F()
-    zt = torchcde.cdeint(X=X, func=func, z0=z0, t=X.interval)
-    zT = zt[:, -1]  # get the terminal value of the CDE
-
-    return zT
+        
+    class Model(torch.nn.Module):
+        def __init__(self):
+            super(Model, self).__init__()
+            self.initial = torch.nn.Linear(input_channels, hidden_channels)
+            self.func = F()
+            self.readout = torch.nn.Linear(hidden_channels, output_channels)
+            
+        def forward(self, coeffs):
+            X = torchcde.NaturalCubicSpline(coeffs)
+            X0 = X.evaluate(X.interval[0])
+            z0 = self.initial(X0)
+            zt = torchcde.cdeint(X=X, func=func, z0=z0, t=X.interval)
+            zT = zt[:, -1]  # get the terminal value of the CDE
+            return self.readout(zT)
+        
+    model = Model()
+    
+    # Run model
+    model(coeffs)
 
 
 def variable_length_data():
