@@ -156,10 +156,10 @@ def linear_interpolation_coeffs(x, t=None, rectilinear=None):
         See the docstring for `torchcde.natural_cubic_spline_coeffs` for more information on why we do it this
         way.
     """
-    t = misc.validate_input_path(x, t)
-
     if rectilinear is not None:
         x = _prepare_rectilinear_interpolation(x, rectilinear)
+
+    t = misc.validate_input_path(x, t)
 
     if torch.isnan(x).any():
         x = _linear_interpolation_coeffs_with_missing_values(t, x.transpose(-1, -2)).transpose(-1, -2)
