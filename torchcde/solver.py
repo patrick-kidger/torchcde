@@ -5,7 +5,7 @@ import torchdiffeq
 def _check_compatability_per_tensor(control_gradient, system, z0):
     if control_gradient.shape[:-1] != z0.shape[:-1]:
         raise ValueError("X.derivative did not return a tensor with the same number of batch dimensions as z0. "
-                         "X.derivative returned shape {} (meaning {} batch dimensions)), whilst z0 has shape {} "
+                         "X.derivative returned shape {} (meaning {} batch dimensions), whilst z0 has shape {} "
                          "(meaning {} batch dimensions)."
                          "".format(tuple(control_gradient.shape), tuple(control_gradient.shape[:-1]), tuple(z0.shape),
                                    tuple(z0.shape[:-1])))
@@ -15,7 +15,7 @@ def _check_compatability_per_tensor(control_gradient, system, z0):
                          .format(len(system.shape), tuple(system.shape)))
     if system.shape[:-2] != z0.shape[:-1]:
         raise ValueError("func did not return a tensor with the same number of batch dimensions as z0. func returned "
-                         "shape {} (meaning {} batch dimensions)), whilst z0 has shape {} (meaning {} batch"
+                         "shape {} (meaning {} batch dimensions), whilst z0 has shape {} (meaning {} batch"
                          " dimensions)."
                          "".format(tuple(system.shape), tuple(system.shape[:-2]), tuple(z0.shape),
                                    tuple(z0.shape[:-1])))
