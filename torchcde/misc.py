@@ -145,3 +145,43 @@ def forward_fill(x, fill_index=-2):
         x = x.gather(dim=fill_index, index=index)
 
     return x
+
+
+class TupleControl(torch.nn.Module):
+    def __init__(self, *controls):
+        super(TupleControl, self).__init__()
+
+        if len(controls) == 0:
+            raise ValueError("Expected one or more controls to batch together.")
+
+        self._interval = controls[0].interval
+        grid_points = controls[0].grid_points
+        same_grid_points = True
+        for control in controls[1:]:
+            if (control.interval != self._interval).any():
+                raise ValueError("Can only batch togehter controls over the same interval.")
+            if same_grid_points and (control.grid_points != grid_points).any():
+                same_grid_points = False
+
+        if same_grid_points:
+            self._grid_points = grid_points
+        else:
+            self._grid_points = None
+
+        self.controls = torch.nn.ModuleList(controls)
+
+    @property
+    def interval(self):
+        return self._interval
+
+    @property
+    def grid_points(self):
+        if self._grid_points is None:
+            raise RuntimeError("Batch of controls have different grid points.")
+        return self._grid_points
+
+    def evaluate(self, t):
+        return tuple(control.evaluate(t) for control in self.controls)
+
+    def derivative(self, t):
+        return tuple(control.derivative(t) for control in self.controls)

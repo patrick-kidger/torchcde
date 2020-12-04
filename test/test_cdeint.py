@@ -13,11 +13,10 @@ def test_shape():
             for _ in range(num_batch_dims):
                 batch_dims.append(torch.randint(low=1, high=3, size=(1,)).item())
 
-            t = torch.rand(num_points).sort().values
             values = torch.rand(*batch_dims, num_points, num_channels)
 
-            coeffs = torchcde.natural_cubic_spline_coeffs(values, t)
-            spline = torchcde.NaturalCubicSpline(coeffs, t)
+            coeffs = torchcde.natural_cubic_coeffs(values)
+            spline = torchcde.NaturalCubicSpline(coeffs)
 
             class _Func(torch.nn.Module):
                 def __init__(self):
@@ -31,10 +30,31 @@ def test_shape():
             z0 = torch.rand(*batch_dims, num_hidden_channels)
 
             num_out_times = torch.randint(low=2, high=10, size=(1,)).item()
-            out_times = torch.rand(num_out_times, dtype=torch.float64).sort().values * (t[-1] - t[0]) + t[0]
+            start, end = spline.interval
+            out_times = torch.rand(num_out_times, dtype=torch.float64).sort().values * (end - start) + start
 
             options = {}
             if method == 'rk4':
                 options['step_size'] = 1. / num_points
             out = torchcde.cdeint(spline, f, z0, out_times, method=method, options=options, rtol=1e-4, atol=1e-6)
             assert out.shape == (*batch_dims, num_out_times, num_hidden_channels)
+
+
+def test_tuple_input():
+    xa = torch.rand(2, 10, 2)
+    xb = torch.rand(10, 1)
+
+    coeffs_a = torchcde.natural_cubic_coeffs(xa)
+    coeffs_b = torchcde.natural_cubic_coeffs(xb)
+    spline_a = torchcde.NaturalCubicSpline(coeffs_a)
+    spline_b = torchcde.NaturalCubicSpline(coeffs_b)
+    X = torchcde.TupleControl(spline_a, spline_b)
+
+    def func(t, z):
+        za, zb = z
+        return za.sigmoid().unsqueeze(-1).repeat_interleave(2, dim=-1), zb.tanh().unsqueeze(-1)
+
+    z0 = torch.rand(2, 3), torch.rand(5, requires_grad=True)
+    out = torchcde.cdeint(X=X, func=func, z0=z0, t=X.interval, adjoint_params=())
+    out[0].sum().backward()
+    assert (z0[1].grad == 0).all()
