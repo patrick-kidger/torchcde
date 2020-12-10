@@ -217,7 +217,7 @@ cdeint(X=X, ...,
 
 As before we should inform the solver about kinks.
 
-This can be a bit unintuitive at first. We suggest firing up matplotlib and plotting things to get a feel for what's going on.
+This can be a bit unintuitive at first. We suggest firing up matplotlib and plotting things to get a feel for what's going on. As a fun sidenote, using rectilinear interpolation makes neural CDEs generalise [ODE-RNNs](https://arxiv.org/abs/1907.03907).
 
 
 #### Fixed solvers
