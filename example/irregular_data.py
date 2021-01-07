@@ -231,7 +231,7 @@ def informative_missingness():
     # they believe to be ill.
     #
     # So let's push the previous example a little further, and include this too.
-    # We begin by generating dadta just like we did before.
+    # We begin by generating data just like we did before.
     ######################
 
     def func(t):
