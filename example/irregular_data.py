@@ -34,11 +34,13 @@ def _solve_cde(x):
     class F(torch.nn.Module):
         def __init__(self):
             super(F, self).__init__()
+            # For illustration purposes only.
+            # Using an MLP or something. A single linear layer won't be that great.
             self.linear = torch.nn.Linear(hidden_channels,
                                           hidden_channels * input_channels)
 
         def forward(self, t, z):
-            return self.linear(z).view(batch_size, hidden_channels, input_channels)
+            return self.linear(z).tanh().view(batch_size, hidden_channels, input_channels)
         
     class Model(torch.nn.Module):
         def __init__(self):
@@ -58,7 +60,7 @@ def _solve_cde(x):
     model = Model()
     
     # Run model
-    model(coeffs)
+    return model(coeffs)
 
 
 def variable_length_data():
