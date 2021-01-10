@@ -2,17 +2,17 @@ import torch
 import torchdiffeq
 
 
-def _check_compatability_per_tensor(control_gradient, system, z0):
+def _check_compatability_per_tensor_base(control_gradient, z0):
     if control_gradient.shape[:-1] != z0.shape[:-1]:
         raise ValueError("X.derivative did not return a tensor with the same number of batch dimensions as z0. "
                          "X.derivative returned shape {} (meaning {} batch dimensions), whilst z0 has shape {} "
                          "(meaning {} batch dimensions)."
                          "".format(tuple(control_gradient.shape), tuple(control_gradient.shape[:-1]), tuple(z0.shape),
                                    tuple(z0.shape[:-1])))
-    if len(system.shape) < 2:
-        raise ValueError("func did not return a tensor with enough dimensions. Expected 2 dimensions, got {} dimensions"
-                         " with shape {}. Recall that func must return a (batch of) matrices, describing a linear map."
-                         .format(len(system.shape), tuple(system.shape)))
+
+
+def _check_compatability_per_tensor_forward(control_gradient, system, z0):
+    _check_compatability_per_tensor_base(control_gradient, z0)
     if system.shape[:-2] != z0.shape[:-1]:
         raise ValueError("func did not return a tensor with the same number of batch dimensions as z0. func returned "
                          "shape {} (meaning {} batch dimensions), whilst z0 has shape {} (meaning {} batch"
@@ -31,71 +31,99 @@ def _check_compatability_per_tensor(control_gradient, system, z0):
                                    control_gradient.size(-1)))
 
 
+def _check_compatability_per_tensor_prod(control_gradient, vector_field, z0):
+    _check_compatability_per_tensor_base(control_gradient, z0)
+    if vector_field.shape != z0.shape:
+        raise ValueError("func.prod did not return a tensor with the same shape as z0. func.prod returned shape {} "
+                         "whilst z0 has shape {}."
+                         "".format(tuple(vector_field.shape), tuple(z0.shape)))
+
+
 def _check_compatability(X, func, z0, t):
     if not hasattr(X, 'derivative'):
         raise ValueError("X must have a 'derivative' method.")
     control_gradient = X.derivative(t[0].detach())
-    system = func(t[0], z0)
+    if hasattr(func, 'prod'):
+        is_prod = True
+        vector_field = func.prod(t[0], z0, control_gradient)
+    else:
+        is_prod = False
+        system = func(t[0], z0)
 
     if isinstance(z0, torch.Tensor):
+        is_tensor = True
         if not isinstance(control_gradient, torch.Tensor):
             raise ValueError("z0 is a tensor and so X.derivative must return a tensor as well.")
-        if not isinstance(system, torch.Tensor):
-            raise ValueError("z0 is a tensor and so func must return a tensor as well.")
-        _check_compatability_per_tensor(control_gradient, system, z0)
-        is_tensor = True
+        if is_prod:
+            if not isinstance(vector_field, torch.Tensor):
+                raise ValueError("z0 is a tensor and so func.prod must return a tensor as well.")
+            _check_compatability_per_tensor_prod(control_gradient, vector_field, z0)
+        else:
+            if not isinstance(system, torch.Tensor):
+                raise ValueError("z0 is a tensor and so func must return a tensor as well.")
+            _check_compatability_per_tensor_forward(control_gradient, system, z0)
 
     elif isinstance(z0, (tuple, list)):
+        is_tensor = False
         if not isinstance(control_gradient, (tuple, list)):
             raise ValueError("z0 is a tuple/list and so X.derivative must return a tuple/list as well.")
-        if not isinstance(system, (tuple, list)):
-            raise ValueError("z0 is a tuple/list and so func must return a tuple/list as well.")
         if len(z0) != len(control_gradient):
             raise ValueError("z0 and X.derivative(t) must be tuples of the same length.")
-        if len(z0) != len(system):
-            raise ValueError("z0 and func(t) must be tuples of the same length.")
-        for control_gradient_, system_, z0_ in zip(control_gradient, system, z0):
-            if not isinstance(control_gradient_, torch.Tensor):
-                raise ValueError("X.derivative must return a tensor or tuple of tensors.")
-            if not isinstance(system_, torch.Tensor):
-                raise ValueError("func must return a tensor or tuple/list of tensors.")
-            _check_compatability_per_tensor(control_gradient_, system_, z0_)
-        is_tensor = False
+        if is_prod:
+            if not isinstance(vector_field, (tuple, list)):
+                raise ValueError("z0 is a tuple/list and so func.prod must return a tuple/list as well.")
+            if len(z0) != len(vector_field):
+                raise ValueError("z0 and func.prod(t, z, dXdt) must be tuples of the same length.")
+            for control_gradient_, vector_Field_, z0_ in zip(control_gradient, vector_field, z0):
+                if not isinstance(control_gradient_, torch.Tensor):
+                    raise ValueError("X.derivative must return a tensor or tuple of tensors.")
+                if not isinstance(vector_Field_, torch.Tensor):
+                    raise ValueError("func.prod must return a tensor or tuple/list of tensors.")
+                _check_compatability_per_tensor_prod(control_gradient_, vector_Field_, z0_)
+        else:
+            if not isinstance(system, (tuple, list)):
+                raise ValueError("z0 is a tuple/list and so func must return a tuple/list as well.")
+            if len(z0) != len(system):
+                raise ValueError("z0 and func(t, z) must be tuples of the same length.")
+            for control_gradient_, system_, z0_ in zip(control_gradient, system, z0):
+                if not isinstance(control_gradient_, torch.Tensor):
+                    raise ValueError("X.derivative must return a tensor or tuple of tensors.")
+                if not isinstance(system_, torch.Tensor):
+                    raise ValueError("func must return a tensor or tuple/list of tensors.")
+                _check_compatability_per_tensor_forward(control_gradient_, system_, z0_)
 
     else:
         raise ValueError("z0 must either a tensor or a tuple/list of tensors.")
 
-    return is_tensor
+    return is_tensor, is_prod
 
 
 class _VectorField(torch.nn.Module):
-    def __init__(self, X, func, is_tensor):
-        """Defines a controlled vector field.
-
-        Arguments:
-            X: As cdeint.
-            func: As cdeint.
-            is_tensor: Whether or not X and func return tensors or tuples.
-        """
+    def __init__(self, X, func, is_tensor, is_prod):
         super(_VectorField, self).__init__()
 
         self.X = X
         self.func = func
         self.is_tensor = is_tensor
+        self.is_prod = is_prod
 
     def forward(self, t, z):
         # control_gradient is of shape (..., input_channels)
         control_gradient = self.X.derivative(t)
-        # vector_field is of shape (..., hidden_channels, input_channels)
-        vector_field = self.func(t, z)
 
-        if self.is_tensor:
+        if self.is_prod:
             # out is of shape (..., hidden_channels)
-            # (The squeezing is necessary to make the matrix-multiply properly batch in all cases)
-            out = (vector_field @ control_gradient.unsqueeze(-1)).squeeze(-1)
+            out = self.func.prod(t, z, control_gradient)
         else:
-            out = tuple((vector_field_ @ control_gradient_.unsqueeze(-1)).squeeze(-1)
-                        for vector_field_, control_gradient_ in zip(vector_field, control_gradient))
+            # vector_field is of shape (..., hidden_channels, input_channels)
+            vector_field = self.func(t, z)
+            if self.is_tensor:
+                # out is of shape (..., hidden_channels)
+                # (The squeezing is necessary to make the matrix-multiply properly batch in all cases)
+                out = (vector_field @ control_gradient.unsqueeze(-1)).squeeze(-1)
+            else:
+                out = tuple((vector_field_ @ control_gradient_.unsqueeze(-1)).squeeze(-1)
+                            for vector_field_, control_gradient_ in zip(vector_field, control_gradient))
 
         return out
 
@@ -119,7 +147,9 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
             should be an instance of `torch.nn.Module`, to collect the parameters for the adjoint pass. Will be called
             with a scalar tensor t and a tensor z of shape (..., hidden_channels), and should return a tensor of shape
             (..., hidden_channels, input_channels), where hidden_channels and input_channels are integers defined by the
-            `hidden_shape` and `X` arguments as above. The '...' corresponds to some number of batch dimensions.
+            `hidden_shape` and `X` arguments as above. The '...' corresponds to some number of batch dimensions. If it
+            has a method `prod` then that will be called to calculate the matrix-vector product f(t, z) dX_t/dt, via
+            `func.prod(t, z, dXdt)`.
         z0: The initial state of the solution. It should have shape (..., hidden_channels), where '...' is some number
             of batch dimensions.
         t: a one dimensional tensor describing the times to range of times to integrate over and output the results at.
@@ -150,7 +180,7 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
     if 'rtol' not in kwargs:
         kwargs['rtol'] = 1e-4
 
-    is_tensor = _check_compatability(X, func, z0, t)
+    is_tensor, is_prod = _check_compatability(X, func, z0, t)
 
     if adjoint:
         try:
@@ -169,7 +199,7 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
         adjoint_params = tuple(param for param in adjoint_params + computed_params if param.requires_grad)
         kwargs['adjoint_params'] = adjoint_params
 
-    vector_field = _VectorField(X=X, func=func, is_tensor=is_tensor)
+    vector_field = _VectorField(X=X, func=func, is_tensor=is_tensor, is_prod=is_prod)
     odeint = torchdiffeq.odeint_adjoint if adjoint else torchdiffeq.odeint
     out = odeint(func=vector_field, y0=z0, t=t, **kwargs)
 

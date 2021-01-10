@@ -58,3 +58,19 @@ def test_tuple_input():
     out = torchcde.cdeint(X=X, func=func, z0=z0, t=X.interval, adjoint_params=())
     out[0].sum().backward()
     assert (z0[1].grad == 0).all()
+
+
+def test_prod():
+    x = torch.rand(2, 5, 1)
+    X = torchcde.NaturalCubicSpline(torchcde.natural_cubic_coeffs(x))
+
+    class F:
+        def prod(self, t, z, dXdt):
+            assert t.shape == ()
+            assert z.shape == (2, 3)
+            assert dXdt.shape == (2, 1)
+            return -z * dXdt
+
+    z0 = torch.rand(2, 3, requires_grad=True)
+    out = torchcde.cdeint(X=X, func=F(), z0=z0, t=X.interval, adjoint_params=())
+    out.sum().backward()
