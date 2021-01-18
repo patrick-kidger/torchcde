@@ -1,6 +1,6 @@
 ######################
-# Processing irregular data is usually rather tricky.
-# One of the best bits about Neural CDEs is how it is instead really straightforward.
+# Processing irregular data is sometimes a little finickity.
+# With neural CDEs, it is instead relatively straightforward.
 #
 # Here we'll look at how you can handle:
 # - variable-length sequences
@@ -10,6 +10,9 @@
 #
 # In every case, the only thing that needs changing is the data preprocessing. You won't need to change your model at
 # all.
+#
+# Note that there's little magical going on here -- the way in which we're going to prepare the data is actually 
+# almost identical to how we would do so for an RNN etc.
 ######################
 
 import torch
@@ -20,7 +23,7 @@ import torchcde
 # We begin with a helper function that solves an example CDE. This is going to be the final step of all of our examples.
 ######################
 def _solve_cde(x):
-    # x should be of shape (batch, length, channels)
+    # x should be of shape (batch, length, channels), and may have NaN values to indicate missing data.
     
     # Create dataset
     coeffs = torchcde.natural_cubic_coeffs(x)
@@ -34,8 +37,8 @@ def _solve_cde(x):
     class F(torch.nn.Module):
         def __init__(self):
             super(F, self).__init__()
-            # For illustration purposes only.
-            # Using an MLP or something. A single linear layer won't be that great.
+            # For illustrative purposes only. You should usually use an MLP or something. A single linear layer won't be 
+            # that great.
             self.linear = torch.nn.Linear(hidden_channels,
                                           hidden_channels * input_channels)
 
