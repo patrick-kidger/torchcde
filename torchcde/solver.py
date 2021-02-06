@@ -1,5 +1,6 @@
 import torch
 import torchdiffeq
+import warnings
 
 
 def _check_compatability_per_tensor_base(control_gradient, z0):
@@ -184,20 +185,25 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
 
     if adjoint:
         try:
-            adjoint_params = tuple(kwargs['adjoint_params'])
+            _adjoint_params = (id(param) for param in kwargs['adjoint_params'])
         except KeyError:
-            try:
-                adjoint_params = tuple(func.parameters())
-            except AttributeError:
-                raise ValueError("If using the adjoint, then either `adjoint_params` must be specified, or `func` "
-                                 "must be a `torch.nn.Module`, to collect the parameters that gradients are calculated "
-                                 "for.")
-        try:
-            computed_params = tuple(X._torchcde_computed_parameters.values())
-        except AttributeError:
-            computed_params = ()
-        adjoint_params = tuple(param for param in adjoint_params + computed_params if param.requires_grad)
-        kwargs['adjoint_params'] = adjoint_params
+            _adjoint_params = ()
+
+        for buffer in X.buffers():
+            # Compare based on id to avoid PyTorch not playing well with using `in` on tensors.
+            if buffer.requires_grad and id(buffer) not in _adjoint_params:
+                warnings.warn("One of the inputs to the control path X requires gradients but is not listed in "
+                              "`options['adjoint_params']`. This is probably a mistake: it will not receive a gradient "
+                              "when using the adjoint method. Either have the input not require gradients (if that "
+                              "was unintended), or include it (and every other parameter needing gradients) in "
+                              "`adjoint_params`. For example:\n"
+                              "```\n"
+                              "coeffs = ...\n"
+                              "func = ...\n"
+                              "X = NaturalCubicSpline(coeffs)\n"
+                              "adjoint_params = tuple(func.parameters()) + (coeffs,)\n"
+                              "cdeint(X=X, func=func, ..., adjoint_params=adjoint_params)\n"
+                              "```")
 
     vector_field = _VectorField(X=X, func=func, is_tensor=is_tensor, is_prod=is_prod)
     odeint = torchdiffeq.odeint_adjoint if adjoint else torchdiffeq.odeint

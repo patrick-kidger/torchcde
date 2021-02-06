@@ -12,28 +12,7 @@ from . import interpolation_linear
 from . import misc
 
 
-def logsignature_windows(x, depth, window_length, t=None):
-    """Calculates logsignatures over multiple windows, for the batch of controls given, as in the log-ODE method.
-    
-    This corresponds to a transform of the time series, and should be used prior to applying one of the interpolation
-    schemes.
-
-    Arguments:
-        x: tensor of values, of shape (..., length, input_channels), where ... is some number of batch dimensions. This
-            is interpreted as a (batch of) paths taking values in an input_channels-dimensional real vector space, with
-            length-many observations. Missing values are supported, and should be represented as NaNs.
-        depth: What depth to compute the logsignatures to.
-        window_length: How long a time interval to compute logsignatures over.
-        t: Optional one dimensional tensor of times. Must be monotonically increasing. If not passed will default to
-            tensor([0., 1., ..., length - 1]).
-
-    Warning:
-        If there are missing values then calling this function can be pretty slow. Make sure to cache the result, and
-        don't reinstantiate it on every forward pass, if at all possible.
-
-    Returns:
-        A tuple of two tensors, which are the values and times of the transformed path.
-    """
+def _logsignature_windows(x, depth, window_length, t, _version):
     t = misc.validate_input_path(x, t)
 
     # slightly roundabout way of doing things (rather than using arange) so that it's constructed differentiably
@@ -78,10 +57,77 @@ def logsignature_windows(x, depth, window_length, t=None):
     compute_logsignature = signatory.Logsignature(depth=depth)
     for index, next_index, time, next_time in zip(new_t_indices[:-1], new_t_indices[1:], new_t[:-1], new_t[1:]):
         logsignature = compute_logsignature(flatten_X[..., index:next_index + 1, :])
-        logsignature = logsignature.view(*batch_dimensions, -1) * (next_time - time)
+        logsignature = logsignature.view(*batch_dimensions, -1)
+        if _version == 0:
+            logsignature = logsignature * (next_time - time)
+        elif _version == 1:
+            pass
+        else:
+            raise RuntimeError
         logsignatures.append(logsignature)
 
     logsignatures = torch.stack(logsignatures, dim=-2)
     logsignatures = logsignatures.cumsum(dim=-2)
 
-    return logsignatures, new_t
+    if _version == 0:
+        return logsignatures, new_t
+    elif _version == 1:
+        return logsignatures
+    else:
+        raise RuntimeError
+
+
+def logsignature_windows(x, depth, window_length, t=None):
+    """Calculates logsignatures over multiple windows, for the batch of controls given, as in the log-ODE method.
+
+    ********************
+    DEPRECATED: this now exists for backward compatibility. For new projects please use `logsig_windows` instead,
+    which has a corrected rescaling coefficient.
+    ********************
+
+    This corresponds to a transform of the time series, and should be used prior to applying one of the interpolation
+    schemes.
+
+    Arguments:
+        x: tensor of values, of shape (..., length, input_channels), where ... is some number of batch dimensions. This
+            is interpreted as a (batch of) paths taking values in an input_channels-dimensional real vector space, with
+            length-many observations. Missing values are supported, and should be represented as NaNs.
+        depth: What depth to compute the logsignatures to.
+        window_length: How long a time interval to compute logsignatures over.
+        t: Optional one dimensional tensor of times. Must be monotonically increasing. If not passed will default to
+            tensor([0., 1., ..., length - 1]).
+
+    Warning:
+        If there are missing values then calling this function can be pretty slow. Make sure to cache the result, and
+        don't reinstantiate it on every forward pass, if at all possible.
+
+    Returns:
+        A tuple of two tensors, which are the values and times of the transformed path.
+    """
+    return _logsignature_windows(x, depth, window_length, t, _version=0)
+
+
+def logsig_windows(x, depth, window_length, t=None):
+    """Calculates logsignatures over multiple windows, for the batch of controls given, as in the log-ODE method.
+
+    This corresponds to a transform of the time series, and should be used prior to applying one of the interpolation
+    schemes.
+
+    Arguments:
+        x: tensor of values, of shape (..., length, input_channels), where ... is some number of batch dimensions. This
+            is interpreted as a (batch of) paths taking values in an `input_channels`-dimensional real vector space,
+            with `length`-many observations. Missing values are supported, and should be represented as NaNs.
+        depth: What depth to compute the logsignatures to.
+        window_length: How long a time interval to compute logsignatures over.
+        t: Optional one dimensional tensor of times. Must be monotonically increasing. If not passed will default to
+            `tensor([0., 1., ..., length - 1])`.
+
+    Warning:
+        If there are missing values then calling this function can be pretty slow. Make sure to cache the result, and
+        don't reinstantiate it on every forward pass, if at all possible.
+
+    Returns:
+        A tensor, which are the values of the transformed path. Times are _not_ returned: the return value is
+        always scaled such that the corresponding times are just `tensor([0., 1., ..., length - 1])`.
+    """
+    return _logsignature_windows(x, depth, window_length, t, _version=1)

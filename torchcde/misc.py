@@ -3,27 +3,6 @@ import numpy as np
 import torch
 
 
-def register_computed_parameter(module, name, tensor):
-    """Registers a "computed parameter", which will be used in the adjoint method."""
-
-    # First take a view of our own internal list of every computed parameter so far (that we only use inside this
-    # function). This is needed to make sure that gradients aren't double-counted if we calculate one computed parameter
-    # from another.
-    try:
-        computed_parameters = module._torchcde_computed_parameters
-    except AttributeError:
-        computed_parameters = {}
-        module._torchcde_computed_parameters = computed_parameters
-    for tens_name, tens_value in list(computed_parameters.items()):
-        tens_value_view = tens_value.view(*tens_value.shape)
-        module.register_buffer(tens_name, tens_value_view)
-        computed_parameters[tens_name] = tens_value_view
-
-    # Now, register it as a buffer (e.g. so that it gets carried over when doing .to())
-    module.register_buffer(name, tensor)
-    computed_parameters[name] = tensor
-
-
 def cheap_stack(tensors, dim):
     if len(tensors) == 1:
         return tensors[0].unsqueeze(dim)

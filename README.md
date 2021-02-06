@@ -17,7 +17,7 @@ In particular this allows for building [Neural Controlled Differential Equation]
 pip install git+https://github.com/patrick-kidger/torchcde.git
 ```
 
-Requires PyTorch >=1.6.
+Requires PyTorch >=1.7 and [`torchdiffeq`](https://github.com/rtqichen/torchdiffeq) >= 0.2.0.
 
 ## Example
 We encourage looking at [example.py](./example/example.py), which demonstrates how to use the library to train a Neural CDE model to predict the chirality of a spiral.
@@ -58,14 +58,14 @@ torchcde.cdeint(X=X, func=func, z0=z0, t=X.interval)
 ```
 
 ## Citation
-If you found use this library useful, we would appreciate a citation:
+If you found use this library useful, please consider citing
 
 ```bibtex
 @article{kidger2020neuralcde,
+    title={{N}eural {C}ontrolled {D}ifferential {E}quations for {I}rregular {T}ime {S}eries},
     author={Kidger, Patrick and Morrill, James and Foster, James and Lyons, Terry},
-    title={{Neural Controlled Differential Equations for Irregular Time Series}},
-    year={2020},
-    journal={arXiv:2005.08926}
+    journal={Advances in Neural Information Processing Systems},
+    year={2020}
 }
 ```
 
@@ -109,7 +109,7 @@ Adjoint backpropagation (which is slower but more memory efficient) can be toggl
 
 _Note that if for some reason you already have a continuous control `X` then you won't need an interpolation scheme at all!_
 
-Natural cubic splines are usually the best choice, if your data isn't arriving continuously over time. (Natural cubic splines aren't causal, so you need to have all your data up-front.) This is what was used in the original [Neural CDE paper](https://arxiv.org/abs/2005.08926). If causality is a concern then one of the two linear interpolations should be used, see the [Further Documentation](#further-documentation) below.
+Natural cubic splines are usually the best choice, if your data isn't arriving continuously over time. Natural cubic splines aren't causal, so you need to have all your data up-front. (If you're a mathematician then we use 'causality' in the precise sense of 'measurable with respect to the natural filtration of the data'.) This is what was used in the original [Neural CDE paper](https://arxiv.org/abs/2005.08926). If causality is a concern then one of the two linear interpolations should be used, see the [Further Documentation](#further-documentation) below.
 
 Just demonstrating natural cubic splines for now:
 ```python
@@ -136,12 +136,6 @@ Then call:
 ```python
 cdeint(X=X, func=... z0=..., t=X.interval)
 ```
-
-## Differences to `controldiffeq`
-If you've used the previous [`controldiffeq`](https://github.com/patrick-kidger/NeuralCDE/tree/master/controldiffeq) library then a couple things have been changed. See [DIFFERENCES.md](./DIFFERENCES.md).
-
-## Extending the library
-If you're interested in extending `torchcde` then have a look at [EXTENDING.md](./EXTENDING.md) for extra help on how to do this.
 
 ## Further documentation
 The earlier documentation section should give everything you need to get up and running.
@@ -189,30 +183,31 @@ If your data has just irregular sampling (but not missing data) then these are s
 
 If there is missing data, however, then this isn't possible. (As some of the channels don't have observations you can interpolate to.) In this case use rectilinear interpolation, below.
 
-Linear interpolation has kinks. If using adaptive solvers then it should be told about the kinks. (Rather than expensively finding them for itself -- slowing down to resolve the kink, and then speeding up again afterwards.) This is done with the `grid_points` and `eps` arguments:
+Linear interpolation has kinks. If using adaptive solvers then it should be told about the kinks. (Rather than expensively finding them for itself -- slowing down to resolve the kink, and then speeding up again afterwards.) This is done with the `jump_t` option (provided by `torchdiffeq`):
 ```python
 coeffs = linear_interpolation_coeffs(x)
 X = LinearInterpolation(coeffs)
 cdeint(X=X, ...,
        method='dopri5',
-       options=dict(grid_points=X.grid_points, eps=1e-5))
+       options=dict(jump_t=X.grid_points))
 ```
 
 * Rectilinear interpolation: This is appropriate if there is missing data, and you need causality.
 
-What is done is to linearly interpolate forward in time (keeping the observations constant), and the linearly interpolate the values (keeping the time constant). This is possible because time is a channel (and the "time" of the differential equation doesn't matter, by the reparameterisation invariance of the previous section).
+What is done is to linearly interpolate forward in time (keeping the observations constant), and the linearly interpolate the values (keeping the time constant). This is possible because time is a channel (and doesn't need to line up with the "time" used in the differential equation solver, as per the reparameterisation invariance of the previous section).
 
 ```python
 t = torch.linspace(0, 1, 10)
 x = torch.rand(2, 10, 3)
 t_ = t.unsqueeze(0).unsqueeze(-1).expand(2, 10, 1)
 x = torch.cat([t_, x], dim=-1)
+del t, t_  # won't need these again!
 # `rectilinear` is the channel index corresponding to time
 coeffs = linear_interpolation_coeffs(x, rectilinear=0)
 X = LinearInterpolation(coeffs)
 cdeint(X=X, ...,
        method='dopri5',
-       options=dict(grid_points=X.grid_points, eps=1e-5))
+       options=dict(jump_t=X.grid_points))
 ```
 
 As before we should inform the solver about kinks.
@@ -257,14 +252,13 @@ This is a way of reducing the length of data by using extra channels. (For examp
 
 This is done by splitting the control `X` up into windows, and computing the _logsignature_ of the control over each window. The logsignature is a transform known to extract the information that is most important to describing how `X` controls a CDE.
 
-This is supported by the `logsignature_windows` function, which takes in data, and produces a transformed path, that now exists in logsignature space:
+This is supported by the `logsig_windows` function, which takes in data, and produces a transformed path, that now exists in logsignature space:
 ```python
 batch, length, channels = 1, 100, 2
 x = torch.rand(batch, length, channels)
-depth, window = 3, 0.2
-x, t = logsignature_windows(x, depth, window)
-# use x and t as you would normally: interpolate, etc.
-# note that t is regularly spaced and can likely be ignored for most purposes
+depth, window = 3, 10.0
+x = logsig_windows(x, depth, window)
+# use x as you would normally: interpolate, etc.
 ```
 
 See the paper [Neural CDEs for Long Time Series via the Log-ODE Method](https://github.com/jambo6/neuralCDEs-via-logODEs) for more information.

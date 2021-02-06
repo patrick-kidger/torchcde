@@ -4,28 +4,6 @@ import torch
 import torchcde
 
 
-def test_computed_parameter():
-    class TestPath(torch.nn.Module):
-        def __init__(self):
-            super(TestPath, self).__init__()
-            x = torch.rand(3, requires_grad=True)
-            torchcde.register_computed_parameter(self, 'variable', x.clone())
-            torchcde.register_computed_parameter(self, 'variable2', self.variable.clone())
-
-    test_path = TestPath()
-    grad = torch.autograd.grad(test_path.variable2.sum(), test_path.variable, allow_unused=True)
-    grad2 = torch.autograd.grad(test_path.variable.sum(), test_path.variable2, allow_unused=True)
-    # Despite one having been created from the other in __init__, they should have had views taken of them afterwards
-    # to ensure that they're not in each other's computation graphs
-    assert grad[0] is None
-    assert grad2[0] is None
-
-    if torch.cuda.is_available():
-        test_path = test_path.to('cuda')
-        assert test_path.variable.device.type == 'cuda'
-        assert test_path.variable2.device.type == 'cuda'
-
-
 class _Func(torch.nn.Module):
     def __init__(self, input_size, hidden_size):
         super(_Func, self).__init__()
@@ -52,8 +30,12 @@ def test_grad_paths():
             func = _Func(input_size=3, hidden_size=3)
             t_ = torch.tensor([0., 9.], requires_grad=True)
 
+            if adjoint:
+                kwargs = dict(adjoint_params=tuple(func.parameters()) + (coeffs, t))
+            else:
+                kwargs = {}
             z = torchcde.cdeint(X=cubic_spline, func=func, z0=z0, t=t_, adjoint=adjoint, method=method, rtol=1e-4,
-                                atol=1e-6)
+                                atol=1e-6, **kwargs)
             assert z.shape == (1, 2, 3)
             assert t.grad is None
             assert path.grad is None
@@ -84,9 +66,7 @@ def test_stacked_paths():
             ctx.been_here_before = True
             return None, x
 
-    ReparameterisedLinearInterpolation = ft.partial(torchcde.LinearInterpolation, reparameterise='bump')
     coeff_paths = [(torchcde.linear_interpolation_coeffs, torchcde.LinearInterpolation),
-                   (torchcde.linear_interpolation_coeffs, ReparameterisedLinearInterpolation),
                    (torchcde.natural_cubic_coeffs, torchcde.NaturalCubicSpline)]
     for adjoint in (False, True):
         for first_coeffs, First in coeff_paths:
@@ -97,16 +77,26 @@ def test_stacked_paths():
                 first_func = _Func(input_size=2, hidden_size=2)
 
                 second_t = torch.linspace(0, 999, 100)
+                if adjoint:
+                    kwargs = dict(adjoint_params=tuple(first_func.parameters()) + (first_coeff,))
+                else:
+                    kwargs = {}
                 second_path = torchcde.cdeint(X=first_X, func=first_func, z0=torch.rand(1, 2),
-                                              t=second_t, adjoint=adjoint, method='rk4', options=dict(step_size=10))
+                                              t=second_t, adjoint=adjoint, method='rk4', options=dict(step_size=10),
+                                              **kwargs)
                 second_path = Record.apply('second', second_path)
                 second_coeff = second_coeffs(second_path, second_t)
                 second_X = Second(second_coeff, second_t)
                 second_func = _Func(input_size=2, hidden_size=2)
 
                 third_t = torch.linspace(0, 999, 10)
+                if adjoint:
+                    kwargs = dict(adjoint_params=tuple(second_func.parameters()) + (second_coeff, second_t))
+                else:
+                    kwargs = {}
                 third_path = torchcde.cdeint(X=second_X, func=second_func, z0=torch.rand(1, 2),
-                                             t=third_t, adjoint=adjoint, method='rk4', options=dict(step_size=10))
+                                             t=third_t, adjoint=adjoint, method='rk4', options=dict(step_size=10),
+                                             **kwargs)
                 third_path = Record.apply('third', third_path)
                 assert first_func.variable.grad is None
                 assert second_func.variable.grad is None
@@ -117,31 +107,26 @@ def test_stacked_paths():
                 assert isinstance(first_path.grad, torch.Tensor)
 
 
-# Tests that the trick in which we use detaches in the backward pass if possible, does in fact work
-# It's a bit superfluous to test it here now that we've upstreamed it into torchdiffeq, but oh well
+# Tests that the trick in which we use detaches in the backward pass if possible, does in fact work.
+# It's a bit superfluous to test it here now that we've upstreamed it into torchdiffeq, but oh well.
 def test_detach_trick():
     path = torch.rand(1, 10, 3)
+    interp = torchcde.NaturalCubicSpline(torchcde.natural_cubic_coeffs(path))
+
     func = _Func(input_size=3, hidden_size=3)
 
-    def interp_():
-        coeffs = torchcde.natural_cubic_coeffs(path)
-        yield torchcde.NaturalCubicSpline(coeffs)
-        coeffs = torchcde.linear_interpolation_coeffs(path)
-        yield torchcde.LinearInterpolation(coeffs, reparameterise='bump')
+    for adjoint in (True, False):
+        variable_grads = []
+        z0 = torch.rand(1, 3)
+        for t_grad in (True, False):
+            t_ = torch.tensor([0., 9.], requires_grad=t_grad)
+            # Don't test dopri5. We will get different results then, because the t variable will force smaller step
+            # sizes and thus slightly different results.
+            z = torchcde.cdeint(X=interp, z0=z0, func=func, t=t_, adjoint=adjoint, method='rk4',
+                                options=dict(step_size=0.5))
+            z[:, -1].sum().backward()
+            variable_grads.append(func.variable.grad.clone())
+            func.variable.grad.zero_()
 
-    for interp in interp_():
-        for adjoint in (True, False):
-            variable_grads = []
-            z0 = torch.rand(1, 3)
-            for t_grad in (True, False):
-                t_ = torch.tensor([0., 9.], requires_grad=t_grad)
-                # Don't test dopri5. We will get different results then, because the t variable will force smaller step
-                # sizes and thus slightly different results.
-                z = torchcde.cdeint(X=interp, z0=z0, func=func, t=t_, adjoint=adjoint, method='rk4',
-                                    options=dict(step_size=0.5))
-                z[:, -1].sum().backward()
-                variable_grads.append(func.variable.grad.clone())
-                func.variable.grad.zero_()
-
-            for elem in variable_grads[1:]:
-                assert (elem == variable_grads[0]).all()
+        for elem in variable_grads[1:]:
+            assert (elem == variable_grads[0]).all()

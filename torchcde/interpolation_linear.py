@@ -1,6 +1,8 @@
 import math
 import torch
+import warnings
 
+from . import interpolation_base
 from . import misc
 
 
@@ -143,9 +145,6 @@ def linear_interpolation_coeffs(x, t=None, rectilinear=None):
             time *must* be a channel in x and the `rectilinear` parameter must be an integer specifying the channel
             index location of the time index in x.
 
-    In particular, the support for missing values allows for batching together elements that are observed at
-    different times; just set them to have missing values at each other's observation times.
-
     Warning:
         If there are missing values then calling this function can be pretty slow. Make sure to cache the result, and
         don't call it on every forward pass, if at all possible.
@@ -153,10 +152,16 @@ def linear_interpolation_coeffs(x, t=None, rectilinear=None):
     Returns:
         A tensor, which should in turn be passed to `torchcde.LinearInterpolation`.
 
-        See the docstring for `torchcde.natural_cubic_coeffs` for more information on why we do it this
-        way.
+        See the docstring for `torchcde.natural_cubic_coeffs` for more information on why we do it this way.
     """
     if rectilinear is not None:
+        if torch.isnan(x[..., 0, :]).any():
+            warnings.warn("The data `x` begins with missing values in some channels. The path will be constructed by "
+                          "backward-filling the first observed value, which is not causal. Raising a warning as the "
+                          "`rectilinear` argument has also been passed, which is nearly always only used when "
+                          "causality is desired. If you need causality then fill in the missing value at the start of "
+                          "each channel with whatever you'd like it to be. (The mean over that channel is a common "
+                          "choice.)")
         x = _prepare_rectilinear_interpolation(x, rectilinear)
 
     t = misc.validate_input_path(x, t)
@@ -166,10 +171,10 @@ def linear_interpolation_coeffs(x, t=None, rectilinear=None):
     return x
 
 
-class LinearInterpolation(torch.nn.Module):
+class LinearInterpolation(interpolation_base.InterpolationBase):
     """Calculates the linear interpolation to the batch of controls given. Also calculates its derivative."""
 
-    def __init__(self, coeffs, t=None, reparameterise='none', **kwargs):
+    def __init__(self, coeffs, t=None, **kwargs):
         """
         Arguments:
             coeffs: As returned by linear_interpolation_coeffs.
@@ -177,17 +182,15 @@ class LinearInterpolation(torch.nn.Module):
                 not need to use this argument**. See the Further Documentation in README.md.)
         """
         super(LinearInterpolation, self).__init__(**kwargs)
-        assert reparameterise in ('none', 'bump')
 
         if t is None:
             t = torch.linspace(0, coeffs.size(-2) - 1, coeffs.size(-2), dtype=coeffs.dtype, device=coeffs.device)
 
         derivs = (coeffs[..., 1:, :] - coeffs[..., :-1, :]) / (t[1:] - t[:-1]).unsqueeze(-1)
 
-        misc.register_computed_parameter(self, '_t', t)
-        misc.register_computed_parameter(self, '_coeffs', coeffs)
-        misc.register_computed_parameter(self, '_derivs', derivs)
-        self._reparameterise = reparameterise
+        self.register_buffer('_t', t)
+        self.register_buffer('_coeffs', coeffs)
+        self.register_buffer('_derivs', derivs)
 
     @property
     def grid_points(self):
@@ -214,23 +217,9 @@ class LinearInterpolation(torch.nn.Module):
         prev_t = self._t[index]
         next_t = self._t[index + 1]
         diff_t = next_t - prev_t
-        if self._reparameterise == 'bump':
-            fractional_part = fractional_part - diff_t * _inv_two_pi * torch.sin(_two_pi * fractional_part / diff_t)
         return prev_coeff + fractional_part * (next_coeff - prev_coeff) / diff_t.unsqueeze(-1)
 
     def derivative(self, t):
         fractional_part, index = self._interpret_t(t)
         deriv = self._derivs[..., index, :]
-
-        if self._reparameterise != 'none':
-            prev_t = self._t[index]
-            next_t = self._t[index + 1]
-            diff_t = next_t - prev_t
-            fractional_part = fractional_part / diff_t
-            if self._reparameterise == 'bump':
-                mult = 1 - torch.cos(_two_pi * fractional_part)
-            else:
-                raise RuntimeError
-
-            deriv = deriv * mult
         return deriv

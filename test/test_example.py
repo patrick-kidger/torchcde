@@ -13,7 +13,4 @@ def test_example():
 
 
 def test_irregular_data():
-    irregular_data.variable_length_data()
-    irregular_data.irregular_sampling()
-    irregular_data.missing_data()
-    irregular_data.informative_missingness()
+    irregular_data.irregular_data()

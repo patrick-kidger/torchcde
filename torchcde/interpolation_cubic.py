@@ -1,5 +1,6 @@
 import torch
 
+from . import interpolation_base
 from . import misc
 
 
@@ -205,9 +206,6 @@ def natural_cubic_spline_coeffs(x, t=None):
             tensor([0., 1., ..., length - 1]). If you are using neural CDEs then you **do not need to use this
             argument**. See the Further Documentation in README.md.
 
-    In particular, the support for missing values allows for batching together elements that are observed at
-    different times; just set them to have missing values at each other's observation times.
-
     Warning:
         If there are missing values then calling this function can be pretty slow. Make sure to cache the result, and
         don't reinstantiate it on every forward pass, if at all possible.
@@ -243,9 +241,6 @@ def natural_cubic_coeffs(x, t=None):
             tensor([0., 1., ..., length - 1]). If you are using neural CDEs then you **do not need to use this
             argument**. See the Further Documentation in README.md.
 
-    In particular, the support for missing values allows for batching together elements that are observed at
-    different times; just set them to have missing values at each other's observation times.
-
     Warning:
         If there are missing values then calling this function can be pretty slow. Make sure to cache the result, and
         don't reinstantiate it on every forward pass, if at all possible.
@@ -270,7 +265,7 @@ def natural_cubic_coeffs(x, t=None):
     return _natural_cubic_spline_coeffs(x, t, _version=1)
 
 
-class NaturalCubicSpline(torch.nn.Module):
+class NaturalCubicSpline(interpolation_base.InterpolationBase):
     """Calculates the natural cubic spline approximation to the batch of controls given. Also calculates its derivative.
 
     Example:
@@ -302,12 +297,12 @@ class NaturalCubicSpline(torch.nn.Module):
         a, b, two_c, three_d = (coeffs[..., :channels], coeffs[..., channels:2 * channels],
                                 coeffs[..., 2 * channels:3 * channels], coeffs[..., 3 * channels:])
 
-        misc.register_computed_parameter(self, '_t', t)
-        misc.register_computed_parameter(self, '_a', a)
-        misc.register_computed_parameter(self, '_b', b)
+        self.register_buffer('_t', t)
+        self.register_buffer('_a', a)
+        self.register_buffer('_b', b)
         # as we're typically computing derivatives, we store the multiples of these coefficients that are more useful
-        misc.register_computed_parameter(self, '_two_c', two_c)
-        misc.register_computed_parameter(self, '_three_d', three_d)
+        self.register_buffer('_two_c', two_c)
+        self.register_buffer('_three_d', three_d)
 
     @property
     def grid_points(self):
