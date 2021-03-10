@@ -257,10 +257,10 @@ This is supported by the `logsig_windows` function, which takes in data, and pro
 batch, length, channels = 1, 100, 2
 x = torch.rand(batch, length, channels)
 depth, window = 3, 10.0
-x = logsig_windows(x, depth, window)
+x = torchcde.logsig_windows(x, depth, window)
 # use x as you would normally: interpolate, etc.
 ```
 
-See the paper [Neural CDEs for Long Time Series via the Log-ODE Method](https://github.com/jambo6/neuralCDEs-via-logODEs) for more information.
+See the paper [Neural Rough Differential Equations for Long Time Series](https://arxiv.org/abs/2009.08295) for more information.
 
 _Note that this requires installing the [Signatory](https://github.com/patrick-kidger/signatory) package._
