@@ -20,7 +20,7 @@ pip install git+https://github.com/patrick-kidger/torchcde.git
 Requires PyTorch >=1.7 and [`torchdiffeq`](https://github.com/rtqichen/torchdiffeq) >= 0.2.0.
 
 ## Example
-We encourage looking at [example.py](./example/example.py), which demonstrates how to use the library to train a Neural CDE model to predict the chirality of a spiral.
+We encourage looking at [time_series_classification.py](./example/time_series_classification.py), which demonstrates how to use the library to train a Neural CDE model to predict the chirality of a spiral.
 
 Also see [irregular_data.py](./example/irregular_data.py), for demonstrations on how to handle variable-length inputs, irregular sampling, or missing data, all of which can be handled easily, without changing the model.
 
@@ -130,7 +130,7 @@ The interface provided by `NaturalCubicSpline` is:
 * `.evaluate(t)`, where `t` is an any-dimensional Tensor, to evaluate the spline at any (collection of) time(s).
 * `.derivative(t)`, where `t` is an any-dimensional Tensor, to evaluate the derivative of the spline at any (collection of) time(s).
 
-Usually `natural_cubic_coeffs` should be computed as a preprocessing step, whilst `NaturalCubicSpline` should be called inside the forward pass of your model. See [example.py](./example/example.py) for a worked example.
+Usually `natural_cubic_coeffs` should be computed as a preprocessing step, whilst `NaturalCubicSpline` should be called inside the forward pass of your model. See [time_series_classification.py](./example/time_series_classification.py) for a worked example.
 
 Then call:
 ```python
@@ -156,7 +156,7 @@ Let <img src="https://render.githubusercontent.com/render/math?math=%5Cpsi%20%5C
 
 We see that <img src="https://render.githubusercontent.com/render/math?math=%5Cwidetilde%7Bz%7D"> **also** satisfies the neural CDE equation, just with <img src="https://render.githubusercontent.com/render/math?math=%5Cwidetilde%7BX%7D"> as input instead of <img src="https://render.githubusercontent.com/render/math?math=X">. In other words, using <img src="https://render.githubusercontent.com/render/math?math=\psi"> changes the speed at which we traverse the input <img src="https://render.githubusercontent.com/render/math?math=X">, and correspondingly changes the speed at which we traverse the output <img src="https://render.githubusercontent.com/render/math?math=z"> -- and that's it! In particular the CDE itself doesn't need any adjusting.
 
-This ends up being a really useful fact for writing neater software. We can handle things like messy data (e.g. variable length time series) just during data preprocessing, without it complicating the model code. In [example.py](/example/example.py), the region we integrate over is given by `X.interval` as a standardised region to integrate over. In the example [irregular_data.py](/example/irregular_data.py), we use this to handle variable-length data.
+This ends up being a really useful fact for writing neater software. We can handle things like messy data (e.g. variable length time series) just during data preprocessing, without it complicating the model code. In [time_series_classification.py](/example/time_series_classification.py), the region we integrate over is given by `X.interval` as a standardised region to integrate over. In the example [irregular_data.py](/example/irregular_data.py), we use this to handle variable-length data.
 
 #### Different interpolation methods
 In brief:
