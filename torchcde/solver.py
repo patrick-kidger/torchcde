@@ -185,9 +185,9 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
 
     if adjoint:
         try:
-            _adjoint_params = (id(param) for param in kwargs['adjoint_params'])
+            _adjoint_params = [id(param) for param in kwargs['adjoint_params']]
         except KeyError:
-            _adjoint_params = ()
+            _adjoint_params = []
 
         for buffer in X.buffers():
             # Compare based on id to avoid PyTorch not playing well with using `in` on tensors.
