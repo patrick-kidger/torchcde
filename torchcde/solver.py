@@ -183,17 +183,12 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
 
     is_tensor, is_prod = _check_compatability(X, func, z0, t)
 
-    if adjoint:
-        try:
-            _adjoint_params = [id(param) for param in kwargs['adjoint_params']]
-        except KeyError:
-            _adjoint_params = []
-
+    if adjoint and 'adjoint_params' not in kwargs:
         for buffer in X.buffers():
             # Compare based on id to avoid PyTorch not playing well with using `in` on tensors.
-            if buffer.requires_grad and id(buffer) not in _adjoint_params:
-                warnings.warn("One of the inputs to the control path X requires gradients but is not listed in "
-                              "`kwargs['adjoint_params']`. This is probably a mistake: it will not receive a gradient "
+            if buffer.requires_grad:
+                warnings.warn("One of the inputs to the control path X requires gradients but `kwargs['adjoint_params']` "
+                              "has not been passed. This is probably a mistake: these inputs will not receive a gradient "
                               "when using the adjoint method. Either have the input not require gradients (if that "
                               "was unintended), or include it (and every other parameter needing gradients) in "
                               "`adjoint_params`. For example:\n"
