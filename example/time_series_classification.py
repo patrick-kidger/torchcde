@@ -55,15 +55,21 @@ class CDEFunc(torch.nn.Module):
 # Next, we need to package CDEFunc up into a model that computes the integral.
 ######################
 class NeuralCDE(torch.nn.Module):
-    def __init__(self, input_channels, hidden_channels, output_channels):
+    def __init__(self, input_channels, hidden_channels, output_channels, interpolation="cubic"):
         super(NeuralCDE, self).__init__()
 
         self.func = CDEFunc(input_channels, hidden_channels)
         self.initial = torch.nn.Linear(input_channels, hidden_channels)
         self.readout = torch.nn.Linear(hidden_channels, output_channels)
+        self.interpolation = interpolation
 
     def forward(self, coeffs):
-        X = torchcde.NaturalCubicSpline(coeffs)
+        if self.interpolation == 'cubic':
+            X = torchcde.NaturalCubicSpline(coeffs)
+        elif self.interpolation == 'linear':
+            X = torchcde.LinearInterpolation(coeffs)
+        else:
+            raise ValueError("Only 'linear' and 'cubic' interpolation methods are implemented.")
 
         ######################
         # Easy to forget gotcha: Initial hidden state should be a function of the first observation.
@@ -92,8 +98,8 @@ class NeuralCDE(torch.nn.Module):
 # Now we need some data.
 # Here we have a simple example which generates some spirals, some going clockwise, some going anticlockwise.
 ######################
-def get_data():
-    t = torch.linspace(0., 4 * math.pi, 100)
+def get_data(num_timepoints=100):
+    t = torch.linspace(0., 4 * math.pi, num_timepoints)
 
     start = torch.rand(128) * 2 * math.pi
     x_pos = torch.cos(start.unsqueeze(1) + t.unsqueeze(0)) / (1 + 0.5 * t)
