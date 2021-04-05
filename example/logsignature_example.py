@@ -77,7 +77,7 @@ def main(num_epochs=15):
     # path over the intervals, at a cost of increased numbers of channels.
     ######################
     depths = [1, 2, 3]
-    window_length = 500
+    window_length = 50
     accuracies = []
     training_times = []
     for depth in depths:
