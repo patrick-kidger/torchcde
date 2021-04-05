@@ -1,17 +1,16 @@
 ######################
-# Here's how to code up a Neural CDE using the log-ode method for a long time series.
-# This method assumes familiarity with the standard Neural CDE example at `example.py`. We will only describe the
-# differences from that example.
+# In this script we code up a Neural CDE using the log-ode method for a long time series thus becoming a Neural RDE.
+# This paper describing this methodology can be found at https://arxiv.org/pdf/2009.08295.pdf
+# This method assumes familiarity with the standard Neural CDE example at `time_series_classification.py`. We will only
+# describe the differences from that example.
 ######################
 import time
 import torch
 import torchcde
 from time_series_classification import NeuralCDE, get_data
 
-torch.manual_seed(0)
 
-
-def _train(train_X, train_y, test_X, test_y, depth=None, num_epochs=10, window_length=100):
+def _train(train_X, train_y, test_X, test_y, depth, num_epochs, window_length):
     # Time the training process
     start_time = time.time()
 
@@ -73,8 +72,9 @@ def main(num_epochs=15):
     # We test the model over logsignature depths [1, 2, 3] with a window length of 50. This reduces the effective
     # length of the path to just 100. The only change is an application of `torchcde.logsig_windows`
 
-    # The number of input channels changes from 3 to [3, 6, 14] for depths [1, 2, 3] respectively. Higher depths contain
-    # more information about the path over the interval, at a cost of increased numbers of channels.
+    # The raw signal has 3 input channels. Taking logsignatures of depths [1, 2, 3] results in a path of logsignatures
+    # of dimension [3, 6, 14] respectively. We see that higher logsignature depths contain more information about the
+    # path over the intervals, at a cost of increased numbers of channels.
     ######################
     depths = [1, 2, 3]
     window_length = 500
@@ -83,7 +83,7 @@ def main(num_epochs=15):
     for depth in depths:
         print_heading('Running for logsignature depth: {}'.format(depth))
         acc, elapsed = _train(
-            train_X, train_y, test_X, test_y, depth=depth, num_epochs=num_epochs, window_length=window_length
+            train_X, train_y, test_X, test_y, depth, num_epochs, window_length
         )
         training_times.append(elapsed)
         accuracies.append(acc)
