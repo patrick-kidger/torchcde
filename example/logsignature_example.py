@@ -6,20 +6,20 @@
 import time
 import torch
 import torchcde
-import example
+from time_series_classification import NeuralCDE, get_data
 
 torch.manual_seed(0)
 
 
-def _training_loop(train_X, train_y, test_X, test_y, depth=None, num_epochs=10, window_length=100):
-    # Time the loop
+def _train(train_X, train_y, test_X, test_y, depth=None, num_epochs=10, window_length=100):
+    # Time the training process
     start_time = time.time()
 
     # Logsignature computation step
     train_logsig = torchcde.logsig_windows(train_X, depth, window_length=window_length)
     print("Logsignature shape: {}".format(train_logsig.size()))
 
-    model = example.NeuralCDE(
+    model = NeuralCDE(
         input_channels=train_logsig.size(-1), hidden_channels=8, output_channels=1, interpolation="linear"
     )
     optimizer = torch.optim.Adam(model.parameters(), lr=0.1)
@@ -40,7 +40,6 @@ def _training_loop(train_X, train_y, test_X, test_y, depth=None, num_epochs=10, 
 
     # Remember to compute the logsignatures of the test data too!
     test_logsig = torchcde.logsig_windows(test_X, depth, window_length=window_length)
-
     test_coeffs = torchcde.linear_interpolation_coeffs(test_logsig)
     pred_y = model(test_coeffs).squeeze(-1)
     binary_prediction = (torch.sigmoid(pred_y) > 0.5).to(test_y.dtype)
@@ -67,8 +66,8 @@ def main(num_epochs=15):
     # will struggle to remember information from early on in the sequence.
     ######################
     num_timepoints = 5000
-    train_X, train_y = example.get_data(num_timepoints=num_timepoints)
-    test_X, test_y = example.get_data(num_timepoints=num_timepoints)
+    train_X, train_y = get_data(num_timepoints=num_timepoints)
+    test_X, test_y = get_data(num_timepoints=num_timepoints)
 
     ######################
     # We test the model over logsignature depths [1, 2, 3] with a window length of 50. This reduces the effective
@@ -78,12 +77,12 @@ def main(num_epochs=15):
     # more information about the path over the interval, at a cost of increased numbers of channels.
     ######################
     depths = [1, 2, 3]
-    window_length = 50
+    window_length = 500
     accuracies = []
     training_times = []
     for depth in depths:
         print_heading('Running for logsignature depth: {}'.format(depth))
-        acc, elapsed = _training_loop(
+        acc, elapsed = _train(
             train_X, train_y, test_X, test_y, depth=depth, num_epochs=num_epochs, window_length=window_length
         )
         training_times.append(elapsed)
