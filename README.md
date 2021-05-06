@@ -261,6 +261,6 @@ x = torchcde.logsig_windows(x, depth, window)
 # use x as you would normally: interpolate, etc.
 ```
 
-See the paper [Neural Rough Differential Equations for Long Time Series](https://arxiv.org/abs/2009.08295) for more information. See [logsignature_example.py](./examples/logsignature_example.py) for a worked example.
+See the paper [Neural Rough Differential Equations for Long Time Series](https://arxiv.org/abs/2009.08295) for more information. See [logsignature_example.py](./example/logsignature_example.py) for a worked example.
 
 _Note that this requires installing the [Signatory](https://github.com/patrick-kidger/signatory) package._
