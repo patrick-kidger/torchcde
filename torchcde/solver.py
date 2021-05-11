@@ -1,5 +1,6 @@
 import torch
 import torchdiffeq
+import torchsde
 import warnings
 
 
@@ -108,6 +109,11 @@ class _VectorField(torch.nn.Module):
         self.is_tensor = is_tensor
         self.is_prod = is_prod
 
+        # torchsde backend
+        self.sde_type = getattr(func, "sde_type", "stratonovich")
+        self.noise_type = getattr(func, "noise_type", "additive")
+
+    # torchdiffeq backend
     def forward(self, t, z):
         # control_gradient is of shape (..., input_channels)
         control_gradient = self.X.derivative(t)
@@ -128,8 +134,14 @@ class _VectorField(torch.nn.Module):
 
         return out
 
+    # torchsde backend
+    f = forward
 
-def cdeint(X, func, z0, t, adjoint=True, **kwargs):
+    def g(self, t, z):
+        return torch.zeros_like(z).unsqueeze(-1)
+
+
+def cdeint(X, func, z0, t, adjoint=True, backend="torchdiffeq", **kwargs):
     r"""Solves a system of controlled differential equations.
 
     Solves the controlled problem:
@@ -156,8 +168,12 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
         t: a one dimensional tensor describing the times to range of times to integrate over and output the results at.
             The initial time will be t[0] and the final time will be t[-1].
         adjoint: A boolean; whether to use the adjoint method to backpropagate. Defaults to True.
+        backend: Either "torchdiffeq" or "torchsde". Which library to use for the solvers. Note that if using torchsde
+            that the Brownian motion component is completely ignored -- so it's still reducing the CDE to an ODE --
+            but it makes it possible to e.g. use an SDE solver there as the ODE/CDE solver here, if for some reason
+            that's desired.
         **kwargs: Any additional kwargs to pass to the odeint solver of torchdiffeq (the most common are `rtol`, `atol`,
-            `method`, `options`).
+            `method`, `options`) or the sdeint solver of torchsde.
 
     Returns:
         The value of each z_{t_i} of the solution to the CDE z_t = z_{t_0} + \int_0^t f(s, z_s)dX_s, where t_i = t[i].
@@ -172,7 +188,7 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
 
     Warnings:
         Note that the returned tensor puts the sequence dimension second-to-last, rather than first like in
-        `torchdiffeq.odeint`.
+        `torchdiffeq.odeint` or `torchsde.sdeint`.
     """
 
     # Reduce the default values for the tolerances because CDEs are difficult to solve with the default high tolerances.
@@ -180,6 +196,11 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
         kwargs['atol'] = 1e-6
     if 'rtol' not in kwargs:
         kwargs['rtol'] = 1e-4
+    if adjoint:
+        if "adjoint_atol" not in kwargs:
+            kwargs["adjoint_atol"] = kwargs["atol"]
+        if "adjoint_rtol" not in kwargs:
+            kwargs["adjoint_rtol"] = kwargs["rtol"]
 
     is_tensor, is_prod = _check_compatability(X, func, z0, t)
 
@@ -187,11 +208,11 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
         for buffer in X.buffers():
             # Compare based on id to avoid PyTorch not playing well with using `in` on tensors.
             if buffer.requires_grad:
-                warnings.warn("One of the inputs to the control path X requires gradients but `kwargs['adjoint_params']` "
-                              "has not been passed. This is probably a mistake: these inputs will not receive a gradient "
-                              "when using the adjoint method. Either have the input not require gradients (if that "
-                              "was unintended), or include it (and every other parameter needing gradients) in "
-                              "`adjoint_params`. For example:\n"
+                warnings.warn("One of the inputs to the control path X requires gradients but "
+                              "`kwargs['adjoint_params']` has not been passed. This is probably a mistake: these "
+                              "inputs will not receive a gradient when using the adjoint method. Either have the input "
+                              "not require gradients (if that was unintended), or include it (and every other "
+                              "parameter needing gradients) in `adjoint_params`. For example:\n"
                               "```\n"
                               "coeffs = ...\n"
                               "func = ...\n"
@@ -201,8 +222,14 @@ def cdeint(X, func, z0, t, adjoint=True, **kwargs):
                               "```")
 
     vector_field = _VectorField(X=X, func=func, is_tensor=is_tensor, is_prod=is_prod)
-    odeint = torchdiffeq.odeint_adjoint if adjoint else torchdiffeq.odeint
-    out = odeint(func=vector_field, y0=z0, t=t, **kwargs)
+    if backend == "torchdiffeq":
+        odeint = torchdiffeq.odeint_adjoint if adjoint else torchdiffeq.odeint
+        out = odeint(func=vector_field, y0=z0, t=t, **kwargs)
+    elif backend == "torchsde":
+        sdeint = torchsde.sdeint_adjoint if adjoint else torchsde.sdeint
+        out = sdeint(sde=vector_field, y0=z0, ts=t, **kwargs)
+    else:
+        raise ValueError(f"Unrecognised backend={backend}")
 
     if is_tensor:
         batch_dims = range(1, len(out.shape) - 1)
