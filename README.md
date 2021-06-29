@@ -88,7 +88,7 @@ where the right hand side describes a matrix-vector product between `f(t, z)` an
 
 This is solved by
 ```python
-cdeint(X, func, z0, t, adjoint, **kwargs)
+cdeint(X, func, z0, t, adjoint, backend, **kwargs)
 ```
 where letting `...` denote an arbitrary number of batch dimensions:
 * `X` is a `torch.nn.Module` with method `derivative`, such that `X.derivative(t)` is a Tensor of shape `(..., input_channels)`,
@@ -96,8 +96,13 @@ where letting `...` denote an arbitrary number of batch dimensions:
 * `z0` is a Tensor of shape `(..., hidden_channels)`,
 * `t` is a one-dimensional Tensor of times to output `z` at.
 * `adjoint` is a boolean (defaulting to `True`).
+* `backend` is a string (defaulting to `"torchdiffeq"`).
 
-Adjoint backpropagation (which is slower but more memory efficient) can be toggled with `adjoint=True/False` and any additional `**kwargs` are passed on to `torchdiffeq.odeint[_adjoint]`, for example to specify the solver.
+Adjoint backpropagation (which is slower but more memory efficient) can be toggled with `adjoint=True/False`.
+
+The `backend` should be either `"torchdiffeq"` or `"torchsde"`, corresponding to which underlying library to use for the solvers. If using torchsde then the stochastic term is zero -- so the CDE is still reduced to an ODE. This is useful if one library supports a feature that the other doesn't. (For example torchsde supports a reversible solver, the [reversible Heun method](https://arxiv.org/abs/2105.13493); at time of writing torchdiffeq does not support any reversible solvers.)
+
+Any additional `**kwargs` are passed on to `torchdiffeq.odeint[_adjoint]` or `torchsde.sdeint[_adjoint]`, for example to specify the solver.
 
 ### Constructing controls
 
