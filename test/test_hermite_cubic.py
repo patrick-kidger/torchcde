@@ -1,38 +1,41 @@
 import torch
-import torchcde
+from torchcde import (
+    hermite_cubic_coefficients_with_backward_differences,
+    HermiteCubicSplinesWithBackwardDifferences,
+)
 
 
-# Represents a random Hermite cubic spline
-class _HermiteCubic:
-    def __init__(self, batch_dims, num_channels, length=3):
-        self.data = torch.randn(*batch_dims, length, num_channels, dtype=torch.float64)
-        x_next = self.data[..., 1:, :]
-        x_prev = self.data[..., :-1, :]
-        delta_next = x_next - x_prev
-        delta_prev = x_next[..., 1:, :] - x_prev[..., :-1, :]
+# Represents a random Hermite cubic spline with unit time jumps
+class _HermiteUnitTime:
+    def __init__(self, data):
+        x_next = data[..., 1:, :]
+        x_prev = data[..., :-1, :]
+        derivs_next = x_next - x_prev
+        derivs_prev = torch.cat([derivs_next[..., [0], :], derivs_next[..., :-1, :]], axis=-2)
+        self._a = x_prev
+        self._b = derivs_prev
+        self._two_c = 2 * 2 * (derivs_next - derivs_prev)
+        self._three_d = - 3 * (derivs_next - derivs_prev)
 
-        self.D = x_prev
-        self.C = delta_prev
-        self.B = 2 * (delta_next - delta_prev)
-        self.A = -(delta_next - delta_prev)
-
-    def _normalise_dims(self, t):
-        a = self.a
-        b = self.b
-        c = self.c
-        d1 = self.d1
-        d2 = self.d2
-        for _ in t.shape:
-            a = a.unsqueeze(-2)
-            b = b.unsqueeze(-2)
-            c = c.unsqueeze(-2)
-            d1 = d1.unsqueeze(-2)
-            d2 = d2.unsqueeze(-2)
-        t = t.unsqueeze(-1)
-        d = torch.where(t >= 0, d2, d1)
-        return a, b, c, d, t
-
-    def evaluate(self):
+    def evaluate(self, fractional_part, index):
+        fractional_part = fractional_part.unsqueeze(-1)
+        inner = 0.5 * self._two_c[..., index, :] + self._three_d[..., index, :] * fractional_part / 3
+        inner = self._b[..., index, :] + inner * fractional_part
+        return self._a[..., index, :] + inner * fractional_part
 
 
-if __name__ == '__main__':
+def test_hermite_cubic_unit_time():
+    for num_channels in (1, 3, 6):
+        for batch_dims in ((1,), (2, 3)):
+            for length in (2, 5, 10):
+                data = torch.randn(*batch_dims, length, num_channels, dtype=torch.float64)
+                # Hermite
+                hermite_coeffs = hermite_cubic_coefficients_with_backward_differences(data)
+                spline = HermiteCubicSplinesWithBackwardDifferences(hermite_coeffs)
+                # Hermite with unit time
+                hermite_cubic_unit = _HermiteUnitTime(data)
+                # Test close
+                times = torch.linspace(0, length, 10)
+                for time in times:
+                    fractional_part, index = spline._interpret_t(time)
+                    torch.allclose(spline.evaluate(time), hermite_cubic_unit.evaluate(fractional_part, index))
