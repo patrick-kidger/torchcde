@@ -14,8 +14,8 @@ def _setup_hermite_cubic_coeffs_w_backward_differences(times, coeffs, derivs, de
     # Coeffs
     a = x_prev
     b = derivs_prev
-    c = (1 / t_diff ** 2) * (3 * (x_diff - b * t_diff) - t_diff * (derivs_next - derivs_prev))
-    d = (1 / (3 * t_diff ** 2)) * (derivs_next - b - 2 * c * t_diff)
+    c = 3 * (x_diff / t_diff ** 2 - b / t_diff) - (derivs_next - derivs_prev) / t_diff
+    d = (1 / (3 * t_diff ** 2)) * (derivs_next - b) - (2 * c) / (3 * t_diff)
     coeffs = torch.cat([a, b, 2 * c, 3 * d], dim=-1).to(device)
     return coeffs
 

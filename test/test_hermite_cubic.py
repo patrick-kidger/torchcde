@@ -35,4 +35,9 @@ def test_hermite_cubic_unit_time():
                 times = torch.linspace(0, length, 10)
                 for time in times:
                     fractional_part, index = spline._interpret_t(time)
-                    torch.allclose(spline.evaluate(time), hermite_cubic_unit.evaluate(fractional_part, index))
+                    print(spline.evaluate(time))
+                    print(hermite_cubic_unit.evaluate(fractional_part, index))
+                    assert torch.allclose(spline.evaluate(time), hermite_cubic_unit.evaluate(fractional_part, index))
+
+if __name__ == '__main__':
+    test_hermite_cubic_unit_time()
