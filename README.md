@@ -25,6 +25,7 @@ We encourage looking at [time_series_classification.py](./example/time_series_cl
 Also see [irregular_data.py](./example/irregular_data.py), for demonstrations on how to handle variable-length inputs, irregular sampling, or missing data, all of which can be handled easily, without changing the model.
 
 A short self contained example:
+
 ```python
 import torch
 import torchcde
@@ -39,16 +40,19 @@ x = torch.cat([t_, x_], dim=2)  # include time as a channel
 
 # Interpolate it
 coeffs = torchcde.natural_cubic_coeffs(x)
-X = torchcde.NaturalCubicSpline(coeffs)
+X = torchcde.CubicSpline(coeffs)
+
 
 # Create the Neural CDE system
 class F(torch.nn.Module):
     def __init__(self):
         super(F, self).__init__()
-        self.linear = torch.nn.Linear(hidden_channels, 
+        self.linear = torch.nn.Linear(hidden_channels,
                                       hidden_channels * input_channels)
+
     def forward(self, t, z):
         return self.linear(z).view(batch, hidden_channels, input_channels)
+
 
 func = F()
 z0 = torch.rand(batch, hidden_channels)
@@ -123,19 +127,19 @@ coeffs = natural_cubic_coeffs(x)
 # coeffs is a torch.Tensor you can save, load,
 # pass through Datasets and DataLoaders etc.
 
-X = NaturalCubicSpline(coeffs)
+X = CubicSpline(coeffs)
 ```
 where:
 * `x` is a Tensor of shape `(..., length, input_channels)`, where `...` is some number of batch dimensions. Missing data should be represented as a `NaN`.
 
-The interface provided by `NaturalCubicSpline` is:
+The interface provided by `CubicSpline` is:
 
 * `.interval`, which gives the time interval the spline is defined over. (Often used as the `t` argument in `cdeint`.) This is determined implicitly from the length of the data, and so does _not_ in general correspond to the time your data was actually observed at. (See the [Further Documentation](#further-documentation) note on reparameterisation invariance.)
 * `.grid_points` is all of the knots in the spline, so that for example `X.evaluate(X.grid_points)` will recover the original data.
 * `.evaluate(t)`, where `t` is an any-dimensional Tensor, to evaluate the spline at any (collection of) time(s).
 * `.derivative(t)`, where `t` is an any-dimensional Tensor, to evaluate the derivative of the spline at any (collection of) time(s).
 
-Usually `natural_cubic_coeffs` should be computed as a preprocessing step, whilst `NaturalCubicSpline` should be called inside the forward pass of your model. See [time_series_classification.py](./example/time_series_classification.py) for a worked example.
+Usually `natural_cubic_coeffs` should be computed as a preprocessing step, whilst `CubicSpline` should be called inside the forward pass of your model. See [time_series_classification.py](./example/time_series_classification.py) for a worked example.
 
 Then call:
 ```python
@@ -164,21 +168,26 @@ We see that <img src="https://render.githubusercontent.com/render/math?math=%5Cw
 This ends up being a really useful fact for writing neater software. We can handle things like messy data (e.g. variable length time series) just during data preprocessing, without it complicating the model code. In [time_series_classification.py](/example/time_series_classification.py), the region we integrate over is given by `X.interval` as a standardised region to integrate over. In the example [irregular_data.py](/example/irregular_data.py), we use this to handle variable-length data.
 
 #### Different interpolation methods
+For a full breakdown into the interpolation schemes, see [Neural Controlled Differential Equations for Online Prediction Tasks](https://arxiv.org/pdf/2106.11028.pdf) where each interpolation scheme is scrutinised, and best practices are presented.
+
 In brief:
  * Do you need causality?
    * No: natural cubic splines.
    * Yes: Is your data multivariate with missing values?
-     * No: linear interpolation
      * Yes: rectilinear interpolation.
+     * No:
+       * Are you using an adaptive scheme?
+         * No: linear interpolation
+         * Yes: Hermite cubic splines with backwards differences
      
 In more detail:
-     
+
 * Natural cubic splines: the fastest approach.
 
 These were a simple choice used in the original Neural CDE paper. They are non-causal, but are very smooth, which makes them easy to integrate and thus fast to use in the differential equation solvers. These are usually the best choice if you don't need causality.
 ```python
 coeffs = natural_cubic_coeffs(x)
-X = NaturalCubicSpline(coeffs)
+X = CubicSpline(coeffs)
 cdeint(X=X, ...)
 ```
 
@@ -192,6 +201,18 @@ Linear interpolation has kinks. If using adaptive solvers then it should be told
 ```python
 coeffs = linear_interpolation_coeffs(x)
 X = LinearInterpolation(coeffs)
+cdeint(X=X, ...,
+       method='dopri5',
+       options=dict(jump_t=X.grid_points))
+```
+* Hermite cubic splines with backwards difference: these are "kind-of" causal in the same way as linear interpolation, but dont have kinks (making them faster with adaptive solvers).
+
+If you require one of the situations that natural cubic splines or linear interpolation are said to work for (non-causal or regular), then Hermite coefficients work like linear interpolation, but smooth the kinks, making them faster. Thay are less smooth than natural cubic coeffs, and therefore slower, but performance is generally better. 
+
+We recommend this scheme for most cases where causality is not a concern and you are using an adaptive solver. If causality is a concern and the data is irregular, use rectilinear interpolation. If you are not using an adaptive solver, use linear interpolation.
+```python
+coeffs = hermite_cubic_coefficients_with_backward_differences(x)
+X = CubicSpline(coeffs)
 cdeint(X=X, ...,
        method='dopri5',
        options=dict(jump_t=X.grid_points))

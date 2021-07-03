@@ -53,7 +53,7 @@ def _solve_cde(x):
             self.readout = torch.nn.Linear(hidden_channels, output_channels)
 
         def forward(self, coeffs):
-            X = torchcde.NaturalCubicSpline(coeffs)
+            X = torchcde.CubicSpline(coeffs)
             X0 = X.evaluate(X.interval[0])
             z0 = self.initial(X0)
             zt = torchcde.cdeint(X=X, func=self.func, z0=z0, t=X.interval)

@@ -1,8 +1,5 @@
 import torch
-from torchcde import (
-    hermite_cubic_coefficients_with_backward_differences,
-    HermiteCubicSplinesWithBackwardDifferences,
-)
+from torchcde import hermite_cubic_coefficients_with_backward_differences, CubicSpline
 
 
 # Represents a random Hermite cubic spline with unit time jumps
@@ -15,7 +12,7 @@ class _HermiteUnitTime:
         self._a = x_prev
         self._b = derivs_prev
         self._two_c = 2 * 2 * (derivs_next - derivs_prev)
-        self._three_d = - 3 * (derivs_next - derivs_prev)
+        self._three_d = -3 * (derivs_next - derivs_prev)
 
     def evaluate(self, fractional_part, index):
         fractional_part = fractional_part.unsqueeze(-1)
@@ -31,7 +28,7 @@ def test_hermite_cubic_unit_time():
                 data = torch.randn(*batch_dims, length, num_channels, dtype=torch.float64)
                 # Hermite
                 hermite_coeffs = hermite_cubic_coefficients_with_backward_differences(data)
-                spline = HermiteCubicSplinesWithBackwardDifferences(hermite_coeffs)
+                spline = CubicSpline(hermite_coeffs)
                 # Hermite with unit time
                 hermite_cubic_unit = _HermiteUnitTime(data)
                 # Test close

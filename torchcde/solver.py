@@ -152,7 +152,7 @@ def cdeint(X, func, z0, t, adjoint=True, backend="torchdiffeq", **kwargs):
 
     Arguments:
         X: The control. This should be a instance of `torch.nn.Module`, with a `derivative` method. For example
-            `torchcde.NaturalCubicSpline`. This represents a continuous path derived from the data. The
+            `torchcde.CubicSpline`. This represents a continuous path derived from the data. The
             derivative at a point will be computed via `X.derivative(t)`, where t is a scalar tensor. The returned
             tensor should have shape (..., input_channels), where '...' is some number of batch dimensions and
             input_channels is the number of channels in the input path.
@@ -216,7 +216,7 @@ def cdeint(X, func, z0, t, adjoint=True, backend="torchdiffeq", **kwargs):
                               "```\n"
                               "coeffs = ...\n"
                               "func = ...\n"
-                              "X = NaturalCubicSpline(coeffs)\n"
+                              "X = CubicSpline(coeffs)\n"
                               "adjoint_params = tuple(func.parameters()) + (coeffs,)\n"
                               "cdeint(X=X, func=func, ..., adjoint_params=adjoint_params)\n"
                               "```")

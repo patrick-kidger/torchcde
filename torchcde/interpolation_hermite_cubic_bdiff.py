@@ -1,5 +1,4 @@
 import torch
-from torchcde.interpolation_cubic import NaturalCubicSpline
 from torchcde.interpolation_linear import linear_interpolation_coeffs
 
 
@@ -47,14 +46,3 @@ def hermite_cubic_coefficients_with_backward_differences(x, t=None):
     return hermite_coeffs
 
 
-class HermiteCubicSplinesWithBackwardDifferences(NaturalCubicSpline):
-    """Calculates the cubic Hermite spline interpolation with backwards differences and its derivative."""
-
-    def __init__(self, coeffs, t=None, **kwargs):
-        """
-        Arguments:
-            coeffs: As returned by hermite_cubic_coefficients_with_backward_differences.
-            t: As passed to linear_interpolation_coeffs. (If it was passed. If you are using neural CDEs then you **do
-                not need to use this argument**. See the Further Documentation in README.md.)
-        """
-        super(HermiteCubicSplinesWithBackwardDifferences, self).__init__(coeffs, t=t, **kwargs)
