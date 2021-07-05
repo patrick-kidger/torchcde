@@ -26,7 +26,7 @@ def _solve_cde(x):
     # x should be a tensor of shape (..., length, channels), and may have missing data represented by NaNs.
 
     # Create dataset
-    coeffs = torchcde.natural_cubic_coeffs(x)
+    coeffs = torchcde.hermite_cubic_coefficients_with_backward_differences(x)
 
     # Create model
     input_channels = x.size(-1)
@@ -146,7 +146,7 @@ def irregular_data():
 
     ######################
     # Missing data is next. We indicated missing values by putting in some NaNs in `x`.
-    # Then when `natural_cubic_coeffs` is called inside `_solve_cde`, it just did the interpolation over the missing
+    # Then when `hermite_cubic_coefficients_with_backward_differences` is called inside `_solve_cde`, it just did the interpolation over the missing
     # values.
     ######################
 

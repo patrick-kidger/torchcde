@@ -1,6 +1,6 @@
 import torch
+from torchcde import interpolation_base
 
-from . import interpolation_base
 from . import misc
 
 
@@ -344,11 +344,3 @@ class NaturalCubicSpline(CubicSpline):
     class is general for any cubic coeffs (currently natural cubic or Hermite with backwards differences).
     ********************
     """
-    def __init__(self, coeffs, t=None, **kwargs):
-        """
-        Arguments:
-            coeffs: As returned by hermite_cubic_coefficients_with_backward_differences.
-            t: As passed to linear_interpolation_coeffs. (If it was passed. If you are using neural CDEs then you **do
-                not need to use this argument**. See the Further Documentation in README.md.)
-        """
-        super(NaturalCubicSpline, self).__init__(coeffs, t=t, **kwargs)
