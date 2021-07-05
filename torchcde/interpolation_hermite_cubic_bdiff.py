@@ -31,7 +31,7 @@ def hermite_cubic_coefficients_with_backward_differences(x, t=None):
 
         See the docstring for `torchcde.natural_cubic_coeffs` for more information on why we do it this way.
     """
-    # Lineaer coeffs
+    # Linear coeffs
     coeffs = linear_interpolation_coeffs(x, t=t, rectilinear=None)
 
     if t is None:
