@@ -1,4 +1,4 @@
-name: Publish
+name: Run test suite
 on: [push, pull_request]
 
 jobs:
