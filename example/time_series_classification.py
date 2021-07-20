@@ -121,7 +121,8 @@ def get_data(num_timepoints=100):
 
     ######################
     # X is a tensor of observations, of shape (batch=128, sequence=100, channels=3)
-    # y is a tensor of labels, of shape (batch=128,), either 0 or 1 corresponding to anticlockwise or clockwise respectively.
+    # y is a tensor of labels, of shape (batch=128,), either 0 or 1 corresponding to anticlockwise or clockwise
+    # respectively.
     ######################
     return X, y
 

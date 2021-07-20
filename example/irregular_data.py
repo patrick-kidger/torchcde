@@ -146,8 +146,8 @@ def irregular_data():
 
     ######################
     # Missing data is next. We indicated missing values by putting in some NaNs in `x`.
-    # Then when `hermite_cubic_coefficients_with_backward_differences` is called inside `_solve_cde`, it just did the interpolation over the missing
-    # values.
+    # Then when `hermite_cubic_coefficients_with_backward_differences` is called inside `_solve_cde`, it just did the
+    # interpolation over the missing values.
     ######################
 
     ######################

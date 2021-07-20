@@ -313,7 +313,7 @@ class CubicSpline(interpolation_base.InterpolationBase):
         return torch.stack([self._t[0], self._t[-1]])
 
     def _interpret_t(self, t):
-        t = torch.as_tensor(t, dtype=self._b.dtype,  device=self._b.device)
+        t = torch.as_tensor(t, dtype=self._b.dtype, device=self._b.device)
         maxlen = self._b.size(-2) - 1
         # clamp because t may go outside of [t[0], t[-1]]; this is fine
         index = torch.bucketize(t.detach(), self._t.detach()).sub(1).clamp(0, maxlen)

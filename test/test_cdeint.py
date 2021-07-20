@@ -4,8 +4,8 @@ import torchcde
 
 
 @pytest.mark.parametrize("backend, method, kwargs", (('torchdiffeq', 'rk4', {"options": {"step_size": 1.0}}),
-                                                      ('torchdiffeq', 'dopri5', {}),
-                                                      ('torchsde', 'midpoint', {"dt": 1.0})))
+                                                     ('torchdiffeq', 'dopri5', {}),
+                                                     ('torchsde', 'midpoint', {"dt": 1.0})))
 def test_shape(backend, method, kwargs):
     for _ in range(5):
         num_points = torch.randint(low=5, high=100, size=(1,)).item()

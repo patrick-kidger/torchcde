@@ -4,9 +4,9 @@ import sys
 _here = pathlib.Path(__file__).resolve().parent
 sys.path.append(str(_here / '../example'))
 
-import irregular_data
-import logsignature_example
-import time_series_classification
+import irregular_data  # noqa: E402
+import logsignature_example  # noqa: E402
+import time_series_classification  # noqa: E402
 
 
 def test_irregular_data():
