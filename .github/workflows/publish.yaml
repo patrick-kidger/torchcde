@@ -32,3 +32,4 @@ jobs:
         source $HOME/.poetry/env
         poetry config pypi-token.pypi ${{ secrets.pypi_token }}
         poetry publish
+
