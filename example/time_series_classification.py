@@ -65,7 +65,7 @@ class NeuralCDE(torch.nn.Module):
 
     def forward(self, coeffs):
         if self.interpolation == 'cubic':
-            X = torchcde.NaturalCubicSpline(coeffs)
+            X = torchcde.CubicSpline(coeffs)
         elif self.interpolation == 'linear':
             X = torchcde.LinearInterpolation(coeffs)
         else:
@@ -138,11 +138,11 @@ def main(num_epochs=30):
     optimizer = torch.optim.Adam(model.parameters())
 
     ######################
-    # Now we turn our dataset into a continuous path. We do this here via natural cubic spline interpolation.
+    # Now we turn our dataset into a continuous path. We do this here via Hermite cubic spline interpolation.
     # The resulting `train_coeffs` is a tensor describing the path.
     # For most problems, it's probably easiest to save this tensor and treat it as the dataset.
     ######################
-    train_coeffs = torchcde.natural_cubic_coeffs(train_X)
+    train_coeffs = torchcde.hermite_cubic_coefficients_with_backward_differences(train_X)
 
     train_dataset = torch.utils.data.TensorDataset(train_coeffs, train_y)
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=32)
@@ -157,7 +157,7 @@ def main(num_epochs=30):
         print('Epoch: {}   Training loss: {}'.format(epoch, loss.item()))
 
     test_X, test_y = get_data()
-    test_coeffs = torchcde.natural_cubic_coeffs(test_X)
+    test_coeffs = torchcde.hermite_cubic_coefficients_with_backward_differences(test_X)
     pred_y = model(test_coeffs).squeeze(-1)
     binary_prediction = (torch.sigmoid(pred_y) > 0.5).to(test_y.dtype)
     prediction_matches = (binary_prediction == test_y).to(test_y.dtype)

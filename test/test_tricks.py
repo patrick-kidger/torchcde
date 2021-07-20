@@ -25,7 +25,7 @@ def test_grad_paths():
             t = torch.linspace(0, 9, 10, requires_grad=True)
             path = torch.rand(1, 10, 3, requires_grad=True)
             coeffs = torchcde.natural_cubic_coeffs(path, t)
-            cubic_spline = torchcde.NaturalCubicSpline(coeffs, t)
+            cubic_spline = torchcde.CubicSpline(coeffs, t)
             z0 = torch.rand(1, 3, requires_grad=True)
             func = _Func(input_size=3, hidden_size=3)
             t_ = torch.tensor([0., 9.], requires_grad=True)
@@ -67,7 +67,7 @@ def test_stacked_paths():
             return None, x
 
     coeff_paths = [(torchcde.linear_interpolation_coeffs, torchcde.LinearInterpolation),
-                   (torchcde.natural_cubic_coeffs, torchcde.NaturalCubicSpline)]
+                   (torchcde.natural_cubic_coeffs, torchcde.CubicSpline)]
     for adjoint in (False, True):
         for first_coeffs, First in coeff_paths:
             for second_coeffs, Second in coeff_paths:
@@ -111,7 +111,7 @@ def test_stacked_paths():
 # It's a bit superfluous to test it here now that we've upstreamed it into torchdiffeq, but oh well.
 def test_detach_trick():
     path = torch.rand(1, 10, 3)
-    interp = torchcde.NaturalCubicSpline(torchcde.natural_cubic_coeffs(path))
+    interp = torchcde.CubicSpline(torchcde.natural_cubic_coeffs(path))
 
     func = _Func(input_size=3, hidden_size=3)
 

@@ -1,6 +1,6 @@
 import torch
+from torchcde import interpolation_base
 
-from . import interpolation_base
 from . import misc
 
 
@@ -211,11 +211,11 @@ def natural_cubic_spline_coeffs(x, t=None):
         don't reinstantiate it on every forward pass, if at all possible.
 
     Returns:
-        A tensor, which should in turn be passed to `torchcde.NaturalCubicSpline`.
+        A tensor, which should in turn be passed to `torchcde.CubicSpline`.
 
         Why do we do it like this? Because typically you want to use PyTorch tensors at various interfaces, for example
         when loading a batch from a DataLoader. If we wrapped all of this up into just the
-        `torchcde.NaturalCubicSpline` class then that sort of thing wouldn't be possible.
+        `torchcde.CubicSpline` class then that sort of thing wouldn't be possible.
 
         As such the suggested use is to:
         (a) Load your data.
@@ -223,7 +223,7 @@ def natural_cubic_spline_coeffs(x, t=None):
         (c) Save the result.
         (d) Treat the result as your dataset as far as PyTorch's `torch.utils.data.Dataset` and
             `torch.utils.data.DataLoader` classes are concerned.
-        (e) Call NaturalCubicSpline as the first part of your model.
+        (e) Call CubicSpline as the first part of your model.
 
         See also the accompanying example.py.
     """
@@ -246,11 +246,11 @@ def natural_cubic_coeffs(x, t=None):
         don't reinstantiate it on every forward pass, if at all possible.
 
     Returns:
-        A tensor, which should in turn be passed to `torchcde.NaturalCubicSpline`.
+        A tensor, which should in turn be passed to `torchcde.CubicSpline`.
 
         Why do we do it like this? Because typically you want to use PyTorch tensors at various interfaces, for example
         when loading a batch from a DataLoader. If we wrapped all of this up into just the
-        `torchcde.NaturalCubicSpline` class then that sort of thing wouldn't be possible.
+        `torchcde.CubicSpline` class then that sort of thing wouldn't be possible.
 
         As such the suggested use is to:
         (a) Load your data.
@@ -258,22 +258,22 @@ def natural_cubic_coeffs(x, t=None):
         (c) Save the result.
         (d) Treat the result as your dataset as far as PyTorch's `torch.utils.data.Dataset` and
             `torch.utils.data.DataLoader` classes are concerned.
-        (e) Call NaturalCubicSpline as the first part of your model.
+        (e) Call CubicSpline as the first part of your model.
 
         See also the accompanying example.py.
     """
     return _natural_cubic_spline_coeffs(x, t, _version=1)
 
 
-class NaturalCubicSpline(interpolation_base.InterpolationBase):
-    """Calculates the natural cubic spline approximation to the batch of controls given. Also calculates its derivative.
+class CubicSpline(interpolation_base.InterpolationBase):
+    """Calculates the cubic spline approximation to the batch of controls given. Also calculates its derivative.
 
     Example:
         # (2, 1) are batch dimensions. 7 is the time dimension (of the same length as t). 3 is the channel dimension.
         x = torch.rand(2, 1, 7, 3)
         coeffs = natural_cubic_coeffs(x)
         # ...at this point you can save coeffs, put it through PyTorch's Datasets and DataLoaders, etc...
-        spline = NaturalCubicSpline(coeffs)
+        spline = CubicSpline(coeffs)
         point = torch.tensor(0.4)
         # will be a tensor of shape (2, 1, 3), corresponding to batch and channel dimensions
         out = spline.derivative(point)
@@ -286,7 +286,7 @@ class NaturalCubicSpline(interpolation_base.InterpolationBase):
             t: As passed to linear_interpolation_coeffs. (If it was passed. If you are using neural CDEs then you **do
                 not need to use this argument**. See the Further Documentation in README.md.)
         """
-        super(NaturalCubicSpline, self).__init__(**kwargs)
+        super(CubicSpline, self).__init__(**kwargs)
 
         if t is None:
             t = torch.linspace(0, coeffs.size(-2), coeffs.size(-2) + 1, dtype=coeffs.dtype, device=coeffs.device)
@@ -334,3 +334,13 @@ class NaturalCubicSpline(interpolation_base.InterpolationBase):
         inner = self._two_c[..., index, :] + self._three_d[..., index, :] * fractional_part
         deriv = self._b[..., index, :] + inner * fractional_part
         return deriv
+
+
+class NaturalCubicSpline(CubicSpline):
+    """Calculates the coefficients of the natural cubic spline approximation to the batch of controls given.
+
+    ********************
+    DEPRECATED: this now exists for backward compatibility. For new projects please use `CubicSpline` instead. This
+    class is general for any cubic coeffs (currently natural cubic or Hermite with backwards differences).
+    ********************
+    """
