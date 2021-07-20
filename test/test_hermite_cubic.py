@@ -38,6 +38,3 @@ def test_hermite_cubic_unit_time():
                     print(spline.evaluate(time))
                     print(hermite_cubic_unit.evaluate(fractional_part, index))
                     assert torch.allclose(spline.evaluate(time), hermite_cubic_unit.evaluate(fractional_part, index))
-
-if __name__ == '__main__':
-    test_hermite_cubic_unit_time()
