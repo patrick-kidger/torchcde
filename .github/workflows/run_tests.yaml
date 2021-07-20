@@ -48,6 +48,6 @@ jobs:
 
       - name: Test with pytest
         run: |
-          python setup.py 
+          python setup.py install
           cd ..
           pytest 
