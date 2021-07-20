@@ -11,3 +11,6 @@ dist/
 *.egg-info/
 **/.mypy_cache/
 env/
+
+# lock dependency file (poetry)
+poetry.lock

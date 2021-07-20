@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "torchcde"
+version = "0.1.0"
+description = "Differentiable GPU-capable solvers for CDEs"
+license = "Apache License, Version 2.0"
+authors = ["Patrick Kidger"]
+packages = [
+    {include = "torchcde"}
+]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+torch = "^1.8.1"
+pytest = "*"
+pytest-cov = "*"
+torchdiffeq = "*"
+torchsde = { git = "https://github.com/google-research/torchsde.git" }
+
+[build-system]
+build-backend = "poetry.masonry.api"
+requires = ["poetry", "wheel", "setuptools-cpp"]
