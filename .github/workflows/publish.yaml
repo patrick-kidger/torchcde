@@ -20,10 +20,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Check version
-        if: (github.event_name == 'pull_request' && github.base_ref == 'master')
+        if: github.base_ref == 'master'
         run: |
           pip install git+https://github.com/patrick-kidger/torchcde.git
-          master_info=$(pip list | grep torchsde)
+          master_info=$(pip list | grep torchcde)
           master_version=$(echo ${master_info} | cut -d " " -f2)
           pip uninstall -y torchcde
           python setup.py install
@@ -44,7 +44,7 @@ jobs:
     strategy:
       matrix:
         python-version: [ 3.6, 3.8 ]
-        os: [ubuntu-latest, macOS-latest]
+        os: [ubuntu-latest, macOS-latest, windows-latest]
       fail-fast: false
     needs: [check_version]
     steps:
