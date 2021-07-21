@@ -4,8 +4,8 @@ import torchcde
 
 
 @pytest.mark.parametrize("backend, method, kwargs", (('torchdiffeq', 'rk4', {"options": {"step_size": 1.0}}),
-                                                      ('torchdiffeq', 'dopri5', {}),
-                                                      ('torchsde', 'midpoint', {"dt": 1.0})))
+                                                     ('torchdiffeq', 'dopri5', {}),
+                                                     ('torchsde', 'midpoint', {"dt": 1.0})))
 def test_shape(backend, method, kwargs):
     for _ in range(5):
         num_points = torch.randint(low=5, high=100, size=(1,)).item()
@@ -25,7 +25,7 @@ def test_shape(backend, method, kwargs):
         values = torch.rand(*batch_dims, num_points, num_channels)
 
         coeffs = torchcde.natural_cubic_coeffs(values)
-        spline = torchcde.NaturalCubicSpline(coeffs)
+        spline = torchcde.CubicSpline(coeffs)
 
         class _Func(torch.nn.Module):
             def __init__(self):
@@ -49,7 +49,7 @@ def test_shape(backend, method, kwargs):
 def test_backend():
     x = torch.randn(1, 10, 2)
     coeffs = torchcde.natural_cubic_coeffs(x)
-    X = torchcde.NaturalCubicSpline(coeffs)
+    X = torchcde.CubicSpline(coeffs)
 
     def func(t, z):
         return -z.unsqueeze(-1).expand(1, 3, 2)
@@ -69,8 +69,8 @@ def test_tuple_input():
 
     coeffs_a = torchcde.natural_cubic_coeffs(xa)
     coeffs_b = torchcde.natural_cubic_coeffs(xb)
-    spline_a = torchcde.NaturalCubicSpline(coeffs_a)
-    spline_b = torchcde.NaturalCubicSpline(coeffs_b)
+    spline_a = torchcde.CubicSpline(coeffs_a)
+    spline_b = torchcde.CubicSpline(coeffs_b)
     X = torchcde.TupleControl(spline_a, spline_b)
 
     def func(t, z):
@@ -85,7 +85,7 @@ def test_tuple_input():
 
 def test_prod():
     x = torch.rand(2, 5, 1)
-    X = torchcde.NaturalCubicSpline(torchcde.natural_cubic_coeffs(x))
+    X = torchcde.CubicSpline(torchcde.natural_cubic_coeffs(x))
 
     class F:
         def prod(self, t, z, dXdt):
