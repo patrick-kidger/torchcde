@@ -3,6 +3,7 @@ import torchcde
 
 import markers
 
+
 @markers.uses_signatory
 def test_with_linear_interpolation():
     import signatory
