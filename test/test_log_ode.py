@@ -1,9 +1,12 @@
-import signatory
+import pytest
+import sys
 import torch
 import torchcde
 
 
+@pytest.mark.skipif(sys.platform == "darwin", reason="Signatory does not support MacOS")
 def test_with_linear_interpolation():
+    import signatory
     window_length = 4
     for depth in (1, 2, 3, 4):
         compute_logsignature = signatory.Logsignature(depth)
