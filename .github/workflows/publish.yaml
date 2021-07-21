@@ -44,7 +44,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install flake8 pytest wheel
+          python -m pip install flake8 pytest wheel
 
       - name: Lint with flake8
         run: |
@@ -53,7 +53,7 @@ jobs:
       - name: Build and install sdist
         run: |
           python setup.py sdist bdist_wheel
-          python install dist/*.tar.gz
+          python -m pip install dist/*.tar.gz
 
       - name: Install Signatory
         if: matrix.os != 'macos-latest'
@@ -78,7 +78,7 @@ jobs:
           
       - name: Run bdist_wheel tests
         run: |
-          python install dist/*.whl
+          python -m pip install dist/*.whl
           python -m pytest
           python -m pip uninstall -y torchcde
 
