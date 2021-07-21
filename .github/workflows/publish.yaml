@@ -25,14 +25,14 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          pip install torchcde
+          python -m pip install torchcde
           pypi_info=$(pip list | grep torchcde)
           pypi_version=$(echo ${pypi_info} | cut -d " " -f2)
-          pip uninstall -y torchcde
+          python -m pip uninstall -y torchcde
           python setup.py install
           master_info=$(pip list | grep torchcde)
           master_version=$(echo ${master_info} | cut -d " " -f2)
-          pip uninstall -y torchcde
+          python -m pip uninstall -y torchcde
           python -c "import itertools as it;
           import sys;
           _, pypi_version, master_version = sys.argv;
@@ -44,11 +44,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install flake8 pytest
+          pip install flake8 pytest wheel
 
       - name: Lint with flake8
         run: |
-          flake8 .
+          python -m flake8 .
 
       - name: Build and install sdist
         run: |
@@ -73,14 +73,14 @@ jobs:
 
       - name: Run sdist tests
         run: |
-          pytest
-          pip uninstall -y torchcde
+          python -m pytest
+          python -m pip uninstall -y torchcde
           
       - name: Run bdist_wheel tests
         run: |
           python install dist/*.whl
-          pytest
-          pip uninstall -y torchcde
+          python -m pytest
+          python -m pip uninstall -y torchcde
 
       - name: Publish to PyPI
         if: matrix.python-version == '3.8' && matrix.os == 'ubuntu-latest'
