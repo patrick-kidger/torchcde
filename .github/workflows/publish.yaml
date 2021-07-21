@@ -1,6 +1,7 @@
 name: Publish
 on:
-  pull_request:
+  release:
+    types: [published]
     branches: [master]
 
 jobs:
@@ -73,7 +74,6 @@ jobs:
           python setup.py sdist bdist_wheel
 
       - name: Publish to PyPI
-        if: github.event_name == 'release'
         uses: pypa/gh-action-pypi-publish@master
         with:
           user: __token__
