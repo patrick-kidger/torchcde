@@ -64,7 +64,7 @@ jobs:
           python setup.py install
           
       - name: Install Signatory
-        if: matrix.os != "macos-latest"
+        if: matrix.os != 'macos-latest'
         run: |
           signatory_version=${python -c "import re
           import subprocess
