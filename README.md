@@ -6,7 +6,7 @@ This library provides differentiable GPU-capable solvers for controlled differen
 In particular this allows for building [Neural Controlled Differential Equation](https://github.com/patrick-kidger/NeuralCDE) models, which are state-of-the-art models for (arbitrarily irregular!) time series. Neural CDEs can be thought of as a "continuous time RNN".
 
 ---
-
+asdf
 <p align="center">
 <img align="middle" src="./imgs/main.png" width="666" />
 </p>
