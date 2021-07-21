@@ -50,12 +50,18 @@ jobs:
         run: |
           python -m flake8 .
 
+      # For some reason egg files see to be getting uploaded to PyPI;
+      # not sure why they're being created.
       - name: Build and install sdist
         shell: bash
         run: |
           python setup.py sdist bdist_wheel
+          rm -f dist/*.egg
           python -m pip install dist/*.tar.gz
 
+      # Happens after install the sdist, so that PyTorch is already installed.
+      # We then detect the version of PyTorch installed, and install the
+      # appropriate version of Signatory.
       - name: Install Signatory
         if: matrix.os != 'macos-latest'
         shell: bash
@@ -86,7 +92,7 @@ jobs:
 
       - name: Publish to PyPI
         if: matrix.python-version == '3.8' && matrix.os == 'ubuntu-latest'
-        uses: pypa/gh-action-pypi-publish@master
+        uses: pypa/gh-action-pypi-publish@v1.4.2
         with:
           user: ${{ secrets.pypi_username }}
           password: ${{ secrets.pypi_password }}
