@@ -83,4 +83,5 @@ jobs:
           python -m flake8 .
 
       - name: Test with pytest
+        run: |
           python -m pytest
