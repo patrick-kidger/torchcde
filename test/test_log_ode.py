@@ -1,10 +1,9 @@
-import pytest
-import sys
 import torch
 import torchcde
 
+import markers
 
-@pytest.mark.skipif(sys.platform == "darwin", reason="Signatory does not support MacOS")
+@markers.uses_signatory
 def test_with_linear_interpolation():
     import signatory
     window_length = 4
