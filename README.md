@@ -14,7 +14,7 @@ In particular this allows for building [Neural Controlled Differential Equation]
 ## Installation
 
 ```bash
-pip install git+https://github.com/patrick-kidger/torchcde.git
+pip install torchcde
 ```
 
 Requires PyTorch >=1.7.
