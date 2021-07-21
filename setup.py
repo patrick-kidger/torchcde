@@ -48,8 +48,7 @@ classifiers = ["Development Status :: 4 - Beta",
 
 python_requires = "~=3.6"
 
-install_requires = ['torch>=1.7.0', 'torchdiffeq>=0.2.0',
-                    'torchsde @ git+https://github.com/google-research/torchsde.git']
+install_requires = ['torch>=1.7.0', 'torchdiffeq>=0.2.0', 'torchsde>=0.2.5']
 
 setuptools.setup(name=name,
                  version=version,
