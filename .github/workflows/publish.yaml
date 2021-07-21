@@ -22,7 +22,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           
       - name: Check version
-        if: matrix.os == 'ubuntu-latest'
+        shell: bash
         run: |
           python -m pip install --upgrade pip
           pip install torchcde
@@ -57,6 +57,7 @@ jobs:
 
       - name: Install Signatory
         if: matrix.os != 'macos-latest'
+        shell: bash
         run: |
           signatory_version=$(python -c "import re
           import subprocess
