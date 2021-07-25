@@ -107,7 +107,7 @@ Any additional `**kwargs` are passed on to `torchdiffeq.odeint[_adjoint]` or `to
 ### Constructing controls
 
  A very common scenario is to construct the continuous control`X` from discrete data (which may be irregularly sampled with missing values). To support this, we provide three main interpolation schemes:
- 
+
 * Hermite cubic splines with backwards differences
 * Linear interpolation
 * Rectilinear interpolation
@@ -174,6 +174,7 @@ In brief:
      * No: linear interpolation.
      * Not sure / both: Hermite cubic splines with backwards differences.
      
+
 In more detail:
 
 * Linear interpolation: these are "kind-of" causal.
@@ -244,12 +245,12 @@ cdeint(
     X=X, t=X.interval, func=..., method='rk4',
     options=dict(step_size=step_size)
 )
-``` 
+```
 
 #### Stacking CDEs
 You may wish to use the output of one CDE to control another. That is, to solve the coupled CDEs:
 ```
-du(t) = g(t, u(t)dz(t)      u(t_0) = u0
+du(t) = g(t, u(t))dz(t)      u(t_0) = u0
 dz(t) = f(t, z(t))dX(t)     z(t_0) = z0
 ```
 
