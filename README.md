@@ -173,7 +173,6 @@ In brief:
      * Yes: Hermite cubic splines with backwards differences.
      * No: linear interpolation.
      * Not sure / both: Hermite cubic splines with backwards differences.
-     
 
 In more detail:
 
@@ -250,7 +249,7 @@ cdeint(
 #### Stacking CDEs
 You may wish to use the output of one CDE to control another. That is, to solve the coupled CDEs:
 ```
-du(t) = g(t, u(t))dz(t)      u(t_0) = u0
+du(t) = g(t, u(t))dz(t)     u(t_0) = u0
 dz(t) = f(t, z(t))dX(t)     z(t_0) = z0
 ```
 
