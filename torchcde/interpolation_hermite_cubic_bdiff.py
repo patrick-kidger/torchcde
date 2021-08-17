@@ -24,7 +24,7 @@ def hermite_cubic_coefficients_with_backward_differences(x, t=None):
     """Computes the coefficients for hermite cubic splines with backward differences.
 
     Arguments:
-        See `linear_interpolation_coeffs` from `torchcde.interpolation.interpolation_linear`.
+        As `torchcde.linear_interpolation_coeffs`.
 
     Returns:
         A tensor, which should in turn be passed to `torchcde.CubicSpline`.
