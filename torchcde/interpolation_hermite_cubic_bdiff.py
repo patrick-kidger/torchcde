@@ -28,8 +28,6 @@ def hermite_cubic_coefficients_with_backward_differences(x, t=None):
 
     Returns:
         A tensor, which should in turn be passed to `torchcde.CubicSpline`.
-
-        See the docstring for `torchcde.natural_cubic_coeffs` for more information on why we do it this way.
     """
     # Linear coeffs
     coeffs = linear_interpolation_coeffs(x, t=t, rectilinear=None)
