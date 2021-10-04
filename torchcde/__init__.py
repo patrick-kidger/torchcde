@@ -6,4 +6,4 @@ from .log_ode import logsignature_windows, logsig_windows
 from .misc import TupleControl
 from .solver import cdeint
 
-__version__ = "0.2.3"
+__version__ = "0.2.4"
