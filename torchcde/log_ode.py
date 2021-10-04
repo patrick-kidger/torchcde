@@ -49,7 +49,7 @@ def _logsignature_windows(x, depth, window_length, t, _version):
     x = interpolation_linear.linear_interpolation_coeffs(x, t)
 
     # Flatten batch dimensions for compatibility with Signatory
-    flatten_X = x.view(-1, x.size(-2), x.size(-1))
+    flatten_X = x.reshape(-1, x.size(-2), x.size(-1))
     first_increment = torch.zeros(*batch_dimensions, signatory.logsignature_channels(x.size(-1), depth), dtype=x.dtype,
                                   device=x.device)
     first_increment[..., :x.size(-1)] = x[..., 0, :]
