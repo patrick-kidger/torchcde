@@ -139,8 +139,10 @@ class TupleControl(torch.nn.Module):
         for control in controls[1:]:
             if (control.interval != self._interval).any():
                 raise ValueError("Can only batch togehter controls over the same interval.")
-            if same_grid_points and (control.grid_points != grid_points).any():
-                same_grid_points = False
+            if same_grid_points:
+                control_grid_points = control.grid_points
+                if control_grid_points.shape != grid_points.shape or (control_grid_points != grid_points).any():
+                    same_grid_points = False
 
         if same_grid_points:
             self._grid_points = grid_points

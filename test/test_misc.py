@@ -1,3 +1,4 @@
+import pytest
 import torch
 import torchcde.misc  # testing an implementation detail
 
@@ -50,3 +51,24 @@ def test_forward_fill():
                         x_ffilled[i, j, k] = input_val
             x_ffilled_actual = torchcde.misc.forward_fill(x)
             assert x_ffilled.allclose(x_ffilled_actual, equal_nan=True)
+
+
+def test_tuple_control_different_number_of_grid_points():
+    t_a = torch.linspace(0, 1, 5)
+    t_b = torch.linspace(0, 1, 3)
+    X_a = torchcde.LinearInterpolation(torchcde.linear_interpolation_coeffs(torch.rand(5, 2), t_a), t_a)
+    X_b = torchcde.LinearInterpolation(torchcde.linear_interpolation_coeffs(torch.rand(3, 1), t_b), t_b)
+    X = torchcde.TupleControl(X_a, X_b)
+    assert torch.equal(X.interval, X_a.interval)
+    with pytest.raises(RuntimeError, match="different grid points"):
+        X.grid_points
+
+    def func(t, z):
+        z_a, z_b = z
+        return z_a.tanh().unsqueeze(-1).expand(3, 2), z_b.tanh().unsqueeze(-1)
+
+    z0 = torch.rand(3), torch.rand(4)
+    z_a, z_b = torchcde.cdeint(X=X, func=func, z0=z0, t=X.interval, adjoint=False, method="rk4",
+                               options=dict(step_size=0.1))
+    assert z_a.shape == (2, 3)
+    assert z_b.shape == (2, 4)
