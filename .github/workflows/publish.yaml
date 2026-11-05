@@ -93,7 +93,7 @@ jobs:
 
       - name: Publish to PyPI
         if: matrix.python-version == '3.8' && matrix.os == 'ubuntu-latest'
-        uses: pypa/gh-action-pypi-publish@v1.4.2
+        uses: pypa/gh-action-pypi-publish@v1.14.3
         with:
           user: ${{ secrets.pypi_username }}
           password: ${{ secrets.pypi_password }}
