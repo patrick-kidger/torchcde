@@ -122,7 +122,7 @@ def _prepare_rectilinear_interpolation(data, time_index):
     # Forward fill and perform lag interleaving for rectilinear
     data_filled = misc.forward_fill(data)
     data_repeat = data_filled.repeat_interleave(2, dim=-2)
-    data_repeat[..., :-1, time_index] = data_repeat[..., 1:, time_index]
+    data_repeat[..., 1:-1:2, time_index] = data_filled[..., 1:, time_index]
     data_rect = data_repeat[..., :-1, :]
 
     return data_rect
@@ -144,6 +144,7 @@ def linear_interpolation_coeffs(x, t=None, rectilinear=None):
             README.md.) Defaults to None, i.e. not performing rectilinear interpolation. For rectilinear interpolation
             time *must* be a channel in x and the `rectilinear` parameter must be an integer specifying the channel
             index location of the time index in x.
+            A time-only control (one channel) is also supported.
 
     Warning:
         If there are missing values then calling this function can be pretty slow. Make sure to cache the result, and
